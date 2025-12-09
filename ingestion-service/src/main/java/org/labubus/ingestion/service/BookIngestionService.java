@@ -1,78 +1,80 @@
 package org.labubus.ingestion.service;
 
+import org.labubus.ingestion.distributed.MessageProducer;
 import org.labubus.ingestion.storage.DatalakeStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.jms.JMSException;
 import java.io.IOException;
 
 public class BookIngestionService {
-	private static final Logger logger = LoggerFactory.getLogger(BookIngestionService.class);
+    private static final Logger logger = LoggerFactory.getLogger(BookIngestionService.class);
 
-	private final DatalakeStorage storage;
-	private final BookDownloader downloader;
+    private final DatalakeStorage storage;
+    private final BookDownloader downloader;
+    private final MessageProducer messageProducer;
 
-	public BookIngestionService(DatalakeStorage storage, BookDownloader downloader) {
-		this.storage = storage;
-		this.downloader = downloader;
-	}
+    public BookIngestionService(DatalakeStorage storage, BookDownloader downloader, MessageProducer messageProducer) {
+        this.storage = storage;
+        this.downloader = downloader;
+        this.messageProducer = messageProducer;
+    }
 
-	public String downloadAndSave(int bookId) throws IOException {
-		logger.info("Starting download for book {}", bookId);
+    public String downloadAndSave(int bookId) throws IOException, JMSException {
+        logger.info("Starting download for book {}", bookId);
 
-		String bookContent = downloader.downloadBook(bookId);
+        String bookContent = downloader.downloadBook(bookId);
 
-		String[] parts = splitHeaderBody(bookContent);
-		String header = parts[0];
-		String body = parts[1];
+        String[] parts = splitHeaderBody(bookContent);
+        String header = parts[0];
+        String body = parts[1];
 
-		String path = storage.saveBook(bookId, header, body);
+        String path = storage.saveBook(bookId, header, body);
+        logger.info("Successfully downloaded and saved book {} to {}", bookId, path);
 
-		logger.info("Successfully downloaded and saved book {} to {}", bookId, path);
-		return path;
-	}
+        messageProducer.sendMessage(bookId);
+        logger.info("Successfully published 'document.ingested' event for book {}", bookId);
 
-	private String[] splitHeaderBody(String content) throws IOException {
-		String startMarker = "*** START OF";
-		int startIndex = content.indexOf(startMarker);
+        return path;
+    }
 
-		if (startIndex == -1) {
-			throw new IOException("Invalid book format: START marker not found. " +
-					"This book may not be in plain text format or may be corrupted.");
-		}
+    private String[] splitHeaderBody(String content) throws IOException {
+        String startMarker = "*** START OF";
+        int startIndex = content.indexOf(startMarker);
 
-		String endMarker = "*** END OF";
-		int endIndex = content.indexOf(endMarker, startIndex);
+        if (startIndex == -1) {
+            throw new IOException("Invalid book format: START marker not found.");
+        }
 
-		if (endIndex == -1) {
-			throw new IOException("Invalid book format: END marker not found. " +
-					"This book may be incomplete or corrupted.");
-		}
+        String endMarker = "*** END OF";
+        int endIndex = content.indexOf(endMarker, startIndex);
 
-		String header = content.substring(0, startIndex).trim();
-		String body = content.substring(startIndex, endIndex).trim();
+        if (endIndex == -1) {
+            throw new IOException("Invalid book format: END marker not found.");
+        }
 
-		body = body.replaceFirst("\\*\\*\\* START OF[^\\n]*\\n", "").trim();
+        String header = content.substring(0, startIndex).trim();
+        String body = content.substring(startIndex, endIndex).trim();
 
-		if (header.isEmpty()) {
-			throw new IOException("Invalid book format: Header is empty");
-		}
+        body = body.replaceFirst("\\*\\*\\* START OF[^\\n]*\\n", "").trim();
 
-		if (body.isEmpty()) {
-			throw new IOException("Invalid book format: Body is empty");
-		}
+        if (header.isEmpty()) {
+            throw new IOException("Invalid book format: Header is empty");
+        }
+        if (body.isEmpty()) {
+            throw new IOException("Invalid book format: Body is empty");
+        }
 
-		logger.debug("Successfully split book - Header: {} chars, Body: {} chars",
-				header.length(), body.length());
+        logger.debug("Successfully split book - Header: {} chars, Body: {} chars", header.length(), body.length());
+        return new String[]{header, body};
+    }
 
-		return new String[]{header, body};
-	}
+    public boolean isBookDownloaded(int bookId) {
+        return storage.isBookDownloaded(bookId);
+    }
 
-	public boolean isBookDownloaded(int bookId) {
-		return storage.isBookDownloaded(bookId);
-	}
-
-	public String getBookPath(int bookId) {
-		return storage.getBookPath(bookId);
-	}
+    public String getBookPath(int bookId) {
+        return storage.getBookPath(bookId);
+    }
 }

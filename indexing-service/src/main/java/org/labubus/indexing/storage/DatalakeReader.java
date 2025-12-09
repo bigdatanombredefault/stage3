@@ -114,4 +114,14 @@ public class DatalakeReader {
 			return false;
 		}
 	}
+
+    public String getBookDirectoryPath(int bookId) throws IOException {
+        Path headerPath = findBookHeader(bookId);
+
+        if (headerPath != null && headerPath.getParent() != null) {
+            return headerPath.getParent().toString();
+        } else {
+            throw new IOException("Could not find directory path for book " + bookId);
+        }
+    }
 }

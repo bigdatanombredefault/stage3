@@ -16,8 +16,6 @@
         <module>ingestion-service</module>
         <module>indexing-service</module>
         <module>search-service</module>
-        <module>control-module</module>
-        <module>benchmarks</module>
     </modules>
 
     <properties>
@@ -33,10 +31,17 @@
         <sqlite.version>3.47.1.0</sqlite.version>
         <postgresql.version>42.7.4</postgresql.version>
         <mongodb.version>5.2.1</mongodb.version>
+
+        <hazelcast.version>5.4.0</hazelcast.version>
+        <activemq.version>5.18.3</activemq.version>
+        <javax.jms.version>2.0.1</javax.jms.version>
+        <jackson.databind.version>2.20.0</jackson.databind.version>
+
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Stage 2 Dependencies -->
             <dependency>
                 <groupId>io.javalin</groupId>
                 <artifactId>javalin</artifactId>
@@ -49,7 +54,6 @@
                 <version>${gson.version}</version>
             </dependency>
 
-            <!-- Logging -->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-simple</artifactId>
@@ -68,6 +72,7 @@
                 <artifactId>jmh-core</artifactId>
                 <version>${jmh.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>org.openjdk.jmh</groupId>
                 <artifactId>jmh-generator-annprocess</artifactId>
@@ -90,6 +95,31 @@
                 <groupId>org.mongodb</groupId>
                 <artifactId>mongodb-driver-sync</artifactId>
                 <version>${mongodb.version}</version>
+            </dependency>
+
+            <!-- New Stage 3 Dependencies -->
+            <dependency>
+                <groupId>com.hazelcast</groupId>
+                <artifactId>hazelcast</artifactId>
+                <version>${hazelcast.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.activemq</groupId>
+                <artifactId>activemq-client</artifactId>
+                <version>${activemq.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>javax.jms</groupId>
+                <artifactId>javax.jms-api</artifactId>
+                <version>${javax.jms.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.databind.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
