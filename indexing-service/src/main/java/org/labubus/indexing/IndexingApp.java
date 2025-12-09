@@ -1,5 +1,7 @@
 package org.labubus.indexing;
 
+import com.hazelcast.config.Config;
+import com.hazelcast.config.FileSystemXmlConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import io.javalin.Javalin;
@@ -18,6 +20,9 @@ public class IndexingApp {
     public static void main(String[] args) {
         try {
             Properties config = loadConfiguration();
+            config.putAll(System.getenv());
+            Config hazelcastConfig = new FileSystemXmlConfig("hazelcast.xml");
+
             int port = Integer.parseInt(config.getProperty("server.port", "7002"));
             String brokerUrl = config.getProperty("activemq.broker.url", "tcp://localhost:61616");
             String queueName = config.getProperty("activemq.queue.name", "document.ingested");
@@ -25,7 +30,7 @@ public class IndexingApp {
             logger.info("Starting Indexing Service...");
 
             // 1. Start Hazelcast and join the cluster
-            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance();
+            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(hazelcastConfig);
             logger.info("Hazelcast instance created and joined the cluster.");
 
             // 2. Create the refactored IndexingService

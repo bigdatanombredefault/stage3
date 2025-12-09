@@ -2,6 +2,9 @@ package org.labubus.indexing.model;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 public record BookMetadata(
 		int bookId,
 		String title,
@@ -9,11 +12,15 @@ public record BookMetadata(
 		String language,
 		Integer year,
 		String path
-) {
-	@NotNull
+) implements Serializable {
+
+    @NotNull
 	@Override
 	public String toString() {
 		return String.format("BookMetadata{id=%d, title='%s', author='%s', lang='%s', year=%d}",
 				bookId, title, author, language, year);
 	}
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 }

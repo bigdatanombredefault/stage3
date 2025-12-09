@@ -21,34 +21,33 @@ public class IngestionApp {
     public static void main(String[] args) {
         try {
             Properties config = loadConfiguration();
+            config.putAll(System.getenv());
 
             logger.info("Starting Ingestion Service...");
 
-            int port = Integer.parseInt(config.getProperty("server.port"));
+            int port = Integer.parseInt(config.getProperty("server.port", "7001"));
             String brokerUrl = config.getProperty("activemq.broker.url");
             String queueName = config.getProperty("activemq.queue.name", "document.ingested");
-
-            String baseUrl = config.getProperty("gutenberg.base.url");
-            int timeout = Integer.parseInt(config.getProperty("gutenberg.download.timeout"));
             String datalakePath = config.getProperty("datalake.path");
-            int bucketSize = Integer.parseInt(config.getProperty("datalake.bucket.size"));
+            String baseUrl = config.getProperty("gutenberg.base.url", "https://www.gutenberg.org/cache/epub");
+            int timeout = Integer.parseInt(config.getProperty("gutenberg.download.timeout", "30000"));
 
-            // Create dependencies
-            DatalakeStorage storage = new BucketDatalakeStorage(datalakePath, bucketSize);
+            // 1. Create dependencies
+            DatalakeStorage storage = new BucketDatalakeStorage(datalakePath, 10);
             BookDownloader downloader = new GutenbergDownloader(baseUrl, timeout);
-
-            // NEW: Create the message producer
             MessageProducer messageProducer = new MessageProducer(brokerUrl, queueName);
-
-            // Inject the new dependency into the service
             BookIngestionService ingestionService = new BookIngestionService(storage, downloader, messageProducer);
             IngestionController controller = new IngestionController(ingestionService, storage);
 
-            // Start Javalin (same as before)
+            // 2. Start the Javalin server (this is the long-running process)
             Javalin app = Javalin.create(cfg -> cfg.showJavalinBanner = false).start(port);
+
+            // 3. Register the API routes
             controller.registerRoutes(app);
 
-            logger.info("Ingestion Service started on port {}", port);
+            // --- END OF MISSING LOGIC ---
+
+            logger.info("Ingestion Service started and listening on port {}", port);
 
         } catch (Exception e) {
             logger.error("Failed to start Ingestion Service", e);

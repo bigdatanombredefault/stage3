@@ -1,6 +1,6 @@
 package org.labubus.indexing.service;
 
-import org.labubus.indexing.model.BookMetadata;
+import org.labubus.core.model.BookMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,9 +16,9 @@ public class MetadataExtractor {
 	private static final Pattern RELEASE_DATE_PATTERN = Pattern.compile("Release Date:\\s*.*?(\\d{4})", Pattern.CASE_INSENSITIVE);
 
 	/**
-	 * Extract metadata from book header
-	 */
-	public BookMetadata extractMetadata(int bookId, String header, String path) {
+     * Extract metadata from book header
+     */
+	public org.labubus.core.model.BookMetadata extractMetadata(int bookId, String header, String path) {
 		String title = extractTitle(header);
 		String author = extractAuthor(header);
 		String language = extractLanguage(header);

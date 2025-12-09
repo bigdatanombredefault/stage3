@@ -9,7 +9,7 @@ import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.labubus.search.model.BookMetadata;
+import org.labubus.core.model.BookMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

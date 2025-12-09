@@ -1,0 +1,64 @@
+services:
+  activemq:
+    image: rmohr/activemq:latest
+    container_name: activemq
+    ports:
+      - "8161:8161"
+      - "61616:61616"
+    networks:
+      - app_net
+    restart: unless-stopped
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: ingestion-service/Dockerfile
+    container_name: ingestion-service
+    networks:
+      - app_net
+    ports:
+      - "7001:7001"
+    volumes:
+      - datalake_data:/datalake
+    environment:
+      - activemq.broker.url=tcp://activemq:61616
+      - datalake.path=/datalake
+    depends_on:
+      - activemq
+    restart: unless-stopped
+
+  indexing-service:
+    build:
+      context: .
+      dockerfile: indexing-service/Dockerfile
+    container_name: indexing-service
+    networks:
+      - app_net
+    volumes:
+      - datalake_data:/datalake
+    environment:
+      - activemq.broker.url=tcp://activemq:61616
+      - datalake.path=/datalake
+    depends_on:
+      - activemq
+    restart: unless-stopped
+
+  search-service:
+    build:
+      context: .
+      dockerfile: search-service/Dockerfile
+    container_name: search-service
+    networks:
+      - app_net
+    ports:
+      - "7003:7003"
+    depends_on:
+      - indexing-service
+    restart: unless-stopped
+
+networks:
+  app_net:
+    driver: bridge
+
+volumes:
+  datalake_data:

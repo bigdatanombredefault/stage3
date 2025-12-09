@@ -1,5 +1,7 @@
 package org.labubus.search;
 
+import com.hazelcast.config.Config;
+import com.hazelcast.config.FileSystemXmlConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import io.javalin.Javalin;
@@ -18,13 +20,16 @@ public class SearchApp {
     public static void main(String[] args) {
         try {
             Properties config = loadConfiguration();
+            config.putAll(System.getenv());
+            Config hazelcastConfig = new FileSystemXmlConfig("hazelcast.xml");
+
             int port = Integer.parseInt(config.getProperty("server.port", "7003"));
             int maxResults = Integer.parseInt(config.getProperty("search.max.results", "100"));
 
             logger.info("Starting Search Service...");
 
             // 1. Start Hazelcast and join the cluster
-            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance();
+            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(hazelcastConfig);
             logger.info("Hazelcast instance created and joined the cluster.");
 
             // 2. Create the refactored SearchService

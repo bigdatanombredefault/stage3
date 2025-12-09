@@ -1,6 +1,6 @@
 package org.labubus.indexing.repository;
 
-import org.labubus.indexing.model.BookMetadata;
+import org.labubus.core.model.BookMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

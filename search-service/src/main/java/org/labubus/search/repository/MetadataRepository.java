@@ -1,6 +1,6 @@
 package org.labubus.search.repository;
 
-import org.labubus.search.model.BookMetadata;
+import org.labubus.core.model.BookMetadata;
 
 import java.sql.SQLException;
 import java.util.List;
