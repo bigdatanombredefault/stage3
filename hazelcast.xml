@@ -8,7 +8,7 @@
     <serialization>
         <java-serialization-filter>
             <whitelist>
-                <prefix>org.labubus.core.model</prefix>
+                <class>org.labubus.model.**</class>
             </whitelist>
         </java-serialization-filter>
     </serialization>
