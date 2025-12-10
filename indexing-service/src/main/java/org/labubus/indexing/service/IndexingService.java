@@ -28,7 +28,19 @@ public class IndexingService {
         this.metadataExtractor = new MetadataExtractor();
     }
 
+    /**
+     * Indexes a single book into Hazelcast, but only if it has not been indexed before.
+     * @param bookId The ID of the book to index.
+     * @throws IOException if reading from the datalake fails.
+     */
     public void indexBook(int bookId) throws IOException {
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(METADATA_MAP_NAME);
+
+        if (metadataMap.containsKey(bookId)) {
+            logger.warn("Book {} has already been indexed. Skipping to ensure idempotency.", bookId);
+            return;
+        }
+
         logger.info("Starting indexing for book {} into Hazelcast", bookId);
 
         if (!datalakeReader.bookExists(bookId)) {
@@ -40,7 +52,6 @@ public class IndexingService {
         String path = datalakeReader.getBookDirectoryPath(bookId);
 
         BookMetadata metadata = metadataExtractor.extractMetadata(bookId, header, path);
-        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(METADATA_MAP_NAME);
         metadataMap.put(metadata.bookId(), metadata);
         logger.info("Saved metadata to Hazelcast for book {}: {}", bookId, metadata.title());
 
@@ -52,6 +63,9 @@ public class IndexingService {
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }
 
+    /**
+     * Clears the index and re-indexes all books from the datalake.
+     */
     public int rebuildIndex() throws IOException {
         logger.info("Starting full index rebuild in Hazelcast...");
 
@@ -76,16 +90,26 @@ public class IndexingService {
         return successCount;
     }
 
+    /**
+     * Gets statistics from the Hazelcast grid.
+     */
     public IndexStats getStats() {
         int booksIndexed = hazelcast.getMap(METADATA_MAP_NAME).size();
         int uniqueWords = hazelcast.getMultiMap(INVERTED_INDEX_NAME).keySet().size();
         return new IndexStats(booksIndexed, uniqueWords);
     }
 
+    /**
+     * A simple helper method to tokenize and clean text.
+     */
     private Set<String> extractWords(String text) {
+        // This simple tokenizer splits by whitespace and punctuation.
         String[] tokens = text.toLowerCase().split("[\\s\\p{Punct}]+");
         return new HashSet<>(Arrays.asList(tokens));
     }
 
+    /**
+     * A simple record to hold index statistics.
+     */
     public record IndexStats(int booksIndexed, int uniqueWords) {}
 }

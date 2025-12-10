@@ -1,7 +1,10 @@
 package org.labubus.indexing;
 
 import com.hazelcast.config.Config;
-import com.hazelcast.config.FileSystemXmlConfig;
+import com.hazelcast.config.JavaSerializationFilterConfig;
+import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.MultiMapConfig;
+import com.hazelcast.config.SerializationConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import io.javalin.Javalin;
@@ -20,44 +23,27 @@ public class IndexingApp {
     public static void main(String[] args) {
         try {
             Properties config = loadConfiguration();
-            config.putAll(System.getenv());
-            Config hazelcastConfig = new FileSystemXmlConfig("hazelcast.xml");
 
-            int port = Integer.parseInt(config.getProperty("server.port", "7002"));
-            String brokerUrl = config.getProperty("activemq.broker.url", "tcp://localhost:61616");
-            String queueName = config.getProperty("activemq.queue.name", "document.ingested");
+            // 1. Create the Hazelcast instance with explicit configuration
+            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(createHazelcastConfig(config));
+            logger.info("Hazelcast instance created programmatically and joined the cluster.");
 
-            logger.info("Starting Indexing Service...");
-
-            // 1. Start Hazelcast and join the cluster
-            HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(hazelcastConfig);
-            logger.info("Hazelcast instance created and joined the cluster.");
-
-            // 2. Create the refactored IndexingService
+            // 2. Create services and background listeners
             IndexingService indexingService = new IndexingService(hazelcastInstance);
-
-            // 3. Start the ActiveMQ listener in a background thread
-            IngestionMessageListener messageListener = new IngestionMessageListener(brokerUrl, queueName, indexingService);
+            IngestionMessageListener messageListener = new IngestionMessageListener(
+                    config.getProperty("activemq.broker.url"),
+                    config.getProperty("activemq.queue.name"),
+                    indexingService
+            );
             messageListener.start();
 
-            // 4. (Optional) Start a Javalin server for health/stats endpoints
-            Javalin app = Javalin.create(cfg -> cfg.showJavalinBanner = false).start(port);
-            // Example of a stats endpoint
-            app.get("/stats", ctx -> {
-                IndexingService.IndexStats stats = indexingService.getStats();
-                ctx.json(stats);
-            });
+            // 3. Start the web server for health/stats
+            Javalin app = startJavalinApp(config, indexingService);
 
-            logger.info("Indexing Service started. Listening for messages from {}", brokerUrl);
+            // 4. Register a shutdown hook to gracefully close resources
+            addShutdownHook(hazelcastInstance, messageListener, app);
 
-            // Add a shutdown hook to gracefully close resources
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                logger.info("Shutting down Indexing Service...");
-                messageListener.stop();
-                hazelcastInstance.shutdown();
-                app.stop();
-                logger.info("Indexing Service stopped.");
-            }));
+            logger.info("Indexing Service started successfully.");
 
         } catch (Exception e) {
             logger.error("Failed to start Indexing Service", e);
@@ -65,14 +51,68 @@ public class IndexingApp {
         }
     }
 
+    /**
+     * Creates and configures a Hazelcast instance programmatically.
+     */
+    private static Config createHazelcastConfig(Properties properties) {
+        Config config = new Config();
+        config.setClusterName("search-engine-cluster");
+
+        MapConfig metadataMapConfig = new MapConfig("book-metadata").setBackupCount(1);
+        MultiMapConfig indexMultiMapConfig = new MultiMapConfig("inverted-index").setBackupCount(1);
+        config.addMapConfig(metadataMapConfig);
+        config.addMultiMapConfig(indexMultiMapConfig);
+
+        JavaSerializationFilterConfig javaFilterConfig = new JavaSerializationFilterConfig();
+        javaFilterConfig.getWhitelist().addClasses("org.labubus.core.model.BookMetadata");
+        config.getSerializationConfig().setJavaSerializationFilterConfig(javaFilterConfig);
+
+        return config;
+    }
+
+    /**
+     * Creates and starts the Javalin web server for API endpoints.
+     */
+    private static Javalin startJavalinApp(Properties config, IndexingService indexingService) {
+        int port = Integer.parseInt(config.getProperty("server.port", "7002"));
+        Javalin app = Javalin.create(cfg -> cfg.showJavalinBanner = false).start(port);
+
+        app.get("/stats", ctx -> {
+            IndexingService.IndexStats stats = indexingService.getStats();
+            ctx.json(stats);
+        });
+
+        logger.info("Javalin server started on port {}", port);
+        return app;
+    }
+
+    /**
+     * Adds a hook to the JVM to ensure services are shut down gracefully on exit.
+     */
+    private static void addShutdownHook(HazelcastInstance hazelcast, IngestionMessageListener listener, Javalin app) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("Shutting down Indexing Service...");
+            listener.stop();
+            hazelcast.shutdown();
+            app.stop();
+            logger.info("Indexing Service stopped.");
+        }));
+    }
+
+    /**
+     * Loads configuration from application.properties and merges with environment variables.
+     */
     private static Properties loadConfiguration() {
-        // This helper method can remain unchanged
         Properties properties = new Properties();
         try (InputStream input = IndexingApp.class.getClassLoader().getResourceAsStream("application.properties")) {
-            if (input != null) properties.load(input);
+            if (input != null) {
+                properties.load(input);
+            }
         } catch (IOException e) {
             logger.warn("Could not load application.properties", e);
         }
+        // Environment variables override file properties
+        properties.putAll(System.getenv());
         return properties;
     }
 }
