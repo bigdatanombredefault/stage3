@@ -4,7 +4,6 @@ import com.hazelcast.config.Config;
 import com.hazelcast.config.JavaSerializationFilterConfig;
 import com.hazelcast.config.MapConfig;
 import com.hazelcast.config.MultiMapConfig;
-import com.hazelcast.config.SerializationConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import io.javalin.Javalin;
@@ -56,7 +55,7 @@ public class SearchApp {
         config.addMultiMapConfig(indexMultiMapConfig);
 
         JavaSerializationFilterConfig javaFilterConfig = new JavaSerializationFilterConfig();
-        javaFilterConfig.getWhitelist().addClasses("org.labubus.core.model.BookMetadata");
+        javaFilterConfig.getWhitelist().addClasses("org.labubus.model.BookMetadata");
         config.getSerializationConfig().setJavaSerializationFilterConfig(javaFilterConfig);
 
         return config;
