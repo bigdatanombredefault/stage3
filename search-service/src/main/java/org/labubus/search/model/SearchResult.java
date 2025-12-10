@@ -1,6 +1,6 @@
 package org.labubus.search.model;
 
-import org.labubus.core.model.BookMetadata;
+import org.labubus.model.BookMetadata;
 
 public record SearchResult(
 		int bookId,

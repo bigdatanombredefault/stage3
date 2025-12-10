@@ -3,7 +3,7 @@ package org.labubus.indexing.service;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import com.hazelcast.multimap.MultiMap;
-import org.labubus.core.model.BookMetadata;
+import org.labubus.model.BookMetadata;
 import org.labubus.indexing.storage.DatalakeReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

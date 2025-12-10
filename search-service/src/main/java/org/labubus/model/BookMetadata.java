@@ -1,4 +1,4 @@
-package org.labubus.search.model;
+package org.labubus.model;
 
 import org.jetbrains.annotations.NotNull;
 

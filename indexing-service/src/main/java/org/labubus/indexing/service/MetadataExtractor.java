@@ -1,6 +1,6 @@
 package org.labubus.indexing.service;
 
-import org.labubus.core.model.BookMetadata;
+import org.labubus.model.BookMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +18,7 @@ public class MetadataExtractor {
 	/**
      * Extract metadata from book header
      */
-	public org.labubus.core.model.BookMetadata extractMetadata(int bookId, String header, String path) {
+	public org.labubus.model.BookMetadata extractMetadata(int bookId, String header, String path) {
 		String title = extractTitle(header);
 		String author = extractAuthor(header);
 		String language = extractLanguage(header);
