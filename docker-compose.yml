@@ -1,7 +1,18 @@
 services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - app_net
+    depends_on:
+      - search-service
+    restart: unless-stopped
+
   activemq:
     image: rmohr/activemq:latest
-    container_name: activemq
     ports:
       - "8161:8161"
       - "61616:61616"
@@ -13,7 +24,6 @@ services:
     build:
       context: .
       dockerfile: ingestion-service/Dockerfile
-    container_name: ingestion-service
     networks:
       - app_net
     ports:
@@ -31,7 +41,6 @@ services:
     build:
       context: .
       dockerfile: indexing-service/Dockerfile
-    container_name: indexing-service
     networks:
       - app_net
     volumes:
@@ -47,11 +56,8 @@ services:
     build:
       context: .
       dockerfile: search-service/Dockerfile
-    container_name: search-service
     networks:
       - app_net
-    ports:
-      - "7003:7003"
     depends_on:
       - indexing-service
     restart: unless-stopped
