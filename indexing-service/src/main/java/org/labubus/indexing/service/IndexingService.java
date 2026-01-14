@@ -70,42 +70,63 @@ public class IndexingService {
      * @throws IOException if reading from the datalake fails.
      */
     public void indexBook(int bookId) throws IOException {
-        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
-
-        if (metadataMap.containsKey(bookId)) {
-            logger.warn("Book {} has already been indexed. Skipping to ensure idempotency.", bookId);
+        if (isAlreadyIndexed(bookId)) {
             return;
         }
-
         logger.info("Starting indexing for book {} into Hazelcast", bookId);
+        ensureBookExists(bookId);
 
-        if (!datalakeReader.bookExists(bookId)) {
-            throw new IOException("Book " + bookId + " not found in datalake");
+        BookData book = readBook(bookId);
+        storeMetadata(bookId, book);
+        indexWords(bookId, book.body());
+    }
+
+    private boolean isAlreadyIndexed(int bookId) {
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
+        if (!metadataMap.containsKey(bookId)) {
+            return false;
         }
+        logger.warn("Book {} has already been indexed. Skipping to ensure idempotency.", bookId);
+        return true;
+    }
 
+    private void ensureBookExists(int bookId) throws IOException {
+        if (datalakeReader.bookExists(bookId)) {
+            return;
+        }
+        throw new IOException("Book " + bookId + " not found in datalake");
+    }
+
+    private BookData readBook(int bookId) throws IOException {
         String header = datalakeReader.readBookHeader(bookId);
         String body = datalakeReader.readBookBody(bookId);
         String path = datalakeReader.getBookDirectoryPath(bookId);
+        return new BookData(header, body, path);
+    }
 
-        BookMetadata metadata = metadataExtractor.extractMetadata(bookId, header, path);
+    private void storeMetadata(int bookId, BookData book) {
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
+        BookMetadata metadata = metadataExtractor.extractMetadata(bookId, book.header(), book.path());
         metadataMap.put(metadata.bookId(), metadata);
         logger.info("Saved metadata to Hazelcast for book {}: {}", bookId, metadata.title());
+    }
 
+    private void indexWords(int bookId, String body) {
         Set<String> words = extractWords(body);
         MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
-
-        for (String word : words) {
-            int shardId = Math.abs(word.hashCode() % shardCount);
-
-            FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:shard:" + shardId);
-            lock.lock();
-            try {
-                invertedIndex.put(word, bookId);
-            } finally {
-                lock.unlock();
-            }
-        }
+        words.forEach(word -> indexWord(invertedIndex, word, bookId));
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
+    }
+
+    private void indexWord(MultiMap<String, Integer> invertedIndex, String word, int bookId) {
+        int shardId = Math.abs(word.hashCode() % shardCount);
+        FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:shard:" + shardId);
+        lock.lock();
+        try {
+            invertedIndex.put(word, bookId);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -113,26 +134,36 @@ public class IndexingService {
      */
     public int rebuildIndex() throws IOException {
         logger.info("Starting full index rebuild in Hazelcast...");
+        clearIndex();
+        List<Integer> bookIds = datalakeReader.getDownloadedBooks();
+        logger.info("Found {} books to index", bookIds.size());
+        int successCount = indexAll(bookIds);
+        logger.info("Index rebuild complete: {} books succeeded.", successCount);
+        return successCount;
+    }
 
+    private void clearIndex() {
         hazelcast.getMap(metadataMapName).clear();
         hazelcast.getMultiMap(invertedIndexName).clear();
         logger.info("Cleared existing data from Hazelcast maps.");
+    }
 
-        List<Integer> bookIds = datalakeReader.getDownloadedBooks();
-        logger.info("Found {} books to index", bookIds.size());
-
+    private int indexAll(List<Integer> bookIds) {
         int successCount = 0;
         for (int bookId : bookIds) {
-            try {
-                indexBook(bookId);
-                successCount++;
-            } catch (IOException e) {
-                logger.error("Failed to index book {}: {}", bookId, e.getMessage(), e);
-            }
+            successCount += indexOneIgnoringFailures(bookId);
         }
-
-        logger.info("Index rebuild complete: {} books succeeded.", successCount);
         return successCount;
+    }
+
+    private int indexOneIgnoringFailures(int bookId) {
+        try {
+            indexBook(bookId);
+            return 1;
+        } catch (IOException e) {
+            logger.error("Failed to index book {}: {}", bookId, e.getMessage(), e);
+            return 0;
+        }
     }
 
     /**
@@ -148,10 +179,15 @@ public class IndexingService {
      * A simple helper method to tokenize and clean text.
      */
     private Set<String> extractWords(String text) {
-        // This simple tokenizer splits by whitespace and punctuation.
-        String[] tokens = text.toLowerCase().split("[\\s\\p{Punct}]+");
+        String[] tokens = tokenize(text);
         return new HashSet<>(Arrays.asList(tokens));
     }
+
+    private String[] tokenize(String text) {
+        return text.toLowerCase().split("[\\s\\p{Punct}]+");
+    }
+
+    private record BookData(String header, String body, String path) {}
 
     /**
      * A simple record to hold index statistics.
