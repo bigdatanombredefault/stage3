@@ -9,7 +9,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
-    <name>Stage 2 - Search Engine Project</name>
+    <name>Stage 3 - Search Engine Project</name>
     <description>Service-Oriented Architecture for Search Engine</description>
 
     <modules>
