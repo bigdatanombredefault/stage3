@@ -11,6 +11,7 @@ import org.labubus.ingestion.service.BookIngestionService;
 import org.labubus.ingestion.service.GutenbergDownloader;
 import org.labubus.ingestion.storage.BucketDatalakeStorage;
 import org.labubus.ingestion.storage.DatalakeStorage;
+import org.labubus.ingestion.storage.TimestampDatalakeStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,9 @@ import io.javalin.Javalin;
 
 public class IngestionApp {
     private static final Logger logger = LoggerFactory.getLogger(IngestionApp.class);
+
+    private static final String ENV_MASTER_NODE_IP = "MASTER_NODE_IP";
+    private static final String ENV_DATA_VOLUME_PATH = "DATA_VOLUME_PATH";
 
     public static void main(String[] args) {
         try {
@@ -41,16 +45,24 @@ public class IngestionApp {
      * Creates all services and controllers, then starts the Javalin web server.
      */
     private static Javalin startJavalinApp(Properties config) {
-        int port = Integer.parseInt(config.getProperty("server.port", "7001"));
-        String brokerUrl = config.getProperty("activemq.broker.url");
-        String queueName = config.getProperty("activemq.queue.name");
-        String datalakePath = config.getProperty("datalake.path");
+        int port = requireInt(config, "server.port");
+        String brokerUrl = requireProperty(config, "activemq.broker.url");
+        String queueName = requireProperty(config, "activemq.queue.name");
+        String datalakePath = requireProperty(config, "datalake.path");
 
-        String baseUrl = config.getProperty("gutenberg.base.url", "https://www.gutenberg.org/cache/epub");
-        int timeout = Integer.parseInt(config.getProperty("gutenberg.download.timeout", "30000"));
+        String datalakeType = requireProperty(config, "datalake.type").trim().toLowerCase();
+        int bucketSize = requireInt(config, "datalake.bucket.size");
+        String trackingFilename = requireProperty(config, "datalake.tracking.filename");
+
+        String baseUrl = requireProperty(config, "gutenberg.base.url");
+        int timeout = requireInt(config, "gutenberg.download.timeout");
 
         // Create all necessary service instances
-        DatalakeStorage storage = new BucketDatalakeStorage(datalakePath, 10);
+        DatalakeStorage storage = switch (datalakeType) {
+            case "timestamp" -> new TimestampDatalakeStorage(datalakePath, trackingFilename);
+            case "bucket" -> new BucketDatalakeStorage(datalakePath, bucketSize, trackingFilename);
+            default -> throw new IllegalArgumentException("Unsupported datalake.type: " + datalakeType);
+        };
         BookDownloader downloader = new GutenbergDownloader(baseUrl, timeout);
         MessageProducer messageProducer = new MessageProducer(brokerUrl, queueName);
         BookIngestionService ingestionService = new BookIngestionService(storage, downloader, messageProducer);
@@ -87,28 +99,46 @@ public class IngestionApp {
         } catch (IOException e) {
             logger.warn("Could not load application.properties", e);
         }
-        // Environment variables will override any properties from the file
         properties.putAll(System.getenv());
 
-        // --- Standardized env vars (default to localhost for testing) ---
-        properties.putIfAbsent("CURRENT_NODE_IP", "localhost");
-        properties.putIfAbsent("MASTER_NODE_IP", "localhost");
-        properties.putIfAbsent("CLUSTER_NODES_LIST", "localhost");
-
         // Normalize datalake path (internal container volume path)
-        String dataVolumePath = properties.getProperty("DATA_VOLUME_PATH");
+        String dataVolumePath = properties.getProperty(ENV_DATA_VOLUME_PATH);
         if (dataVolumePath == null || dataVolumePath.isBlank()) {
-            dataVolumePath = properties.getProperty("datalake.path", "../datalake");
-            properties.setProperty("DATA_VOLUME_PATH", dataVolumePath);
+            String configuredDatalakePath = properties.getProperty("datalake.path");
+            if (configuredDatalakePath != null && !configuredDatalakePath.isBlank()) {
+                properties.setProperty(ENV_DATA_VOLUME_PATH, configuredDatalakePath.trim());
+            }
+        } else {
+            properties.setProperty(ENV_DATA_VOLUME_PATH, dataVolumePath.trim());
         }
-        properties.setProperty("datalake.path", dataVolumePath);
+
+        if (properties.getProperty(ENV_DATA_VOLUME_PATH) != null && !properties.getProperty(ENV_DATA_VOLUME_PATH).isBlank()) {
+            properties.setProperty("datalake.path", properties.getProperty(ENV_DATA_VOLUME_PATH).trim());
+        }
 
         // Compute broker URL from MASTER_NODE_IP unless explicitly set.
-        String masterIp = properties.getProperty("MASTER_NODE_IP", "localhost");
         String brokerUrl = properties.getProperty("activemq.broker.url", "");
-        if (brokerUrl.isBlank() || brokerUrl.equals("tcp://localhost:61616")) {
+        if (brokerUrl.isBlank()) {
+            String masterIp = requireProperty(properties, ENV_MASTER_NODE_IP);
             properties.setProperty("activemq.broker.url", "tcp://" + masterIp + ":61616");
         }
         return properties;
+    }
+
+    private static String requireProperty(Properties properties, String key) {
+        String value = properties.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required configuration: " + key);
+        }
+        return value.trim();
+    }
+
+    private static int requireInt(Properties properties, String key) {
+        String value = requireProperty(properties, key);
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Invalid integer for configuration '" + key + "': '" + value + "'", e);
+        }
     }
 }

@@ -1,7 +1,10 @@
 package org.labubus.ingestion.controller;
 
-import io.javalin.Javalin;
-import io.javalin.http.Context;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import org.labubus.ingestion.model.IngestionResponse;
 import org.labubus.ingestion.model.IngestionStatusResponse;
 import org.labubus.ingestion.service.BookIngestionService;
@@ -9,10 +12,8 @@ import org.labubus.ingestion.storage.DatalakeStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import io.javalin.Javalin;
+import io.javalin.http.Context;
 
 public class IngestionController {
     private static final Logger logger = LoggerFactory.getLogger(IngestionController.class);

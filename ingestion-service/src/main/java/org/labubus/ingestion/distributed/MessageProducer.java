@@ -1,6 +1,12 @@
 package org.labubus.ingestion.distributed;
 
-import javax.jms.*;
+import javax.jms.Connection;
+import javax.jms.ConnectionFactory;
+import javax.jms.DeliveryMode;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.Session;
+import javax.jms.TextMessage;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.slf4j.Logger;
@@ -29,25 +35,18 @@ public class MessageProducer {
      * @throws JMSException if the connection or message sending fails.
      */
     public void sendMessage(int bookId) throws JMSException {
-        // 'try-with-resources' ensures that the connection is automatically closed
-        // even if an error occurs. This is the recommended way to handle JMS resources.
         try (Connection connection = connectionFactory.createConnection()) {
             connection.start();
 
-            // Create a non-transactional session with automatic acknowledgement.
             Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-            // Get the queue destination.
             Destination destination = session.createQueue(queueName);
 
-            // Create a producer to send messages to the queue.
             javax.jms.MessageProducer producer = session.createProducer(destination);
             producer.setDeliveryMode(DeliveryMode.PERSISTENT); // Ensure message survives a broker restart
 
-            // Create a text message with the book ID.
             TextMessage message = session.createTextMessage(String.valueOf(bookId));
 
-            // Send the message.
             producer.send(message);
             logger.debug("Sent message for bookId: {}", bookId);
         }

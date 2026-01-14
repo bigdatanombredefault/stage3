@@ -1,10 +1,18 @@
 package org.labubus.ingestion.storage;
 
-import java.io.*;
-import java.nio.file.*;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,9 +24,15 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 	private final String datalakePath;
 	private final Path downloadedBooksFile;
 
-	public TimestampDatalakeStorage(String datalakePath) {
-		this.datalakePath = datalakePath;
-		this.downloadedBooksFile = Paths.get(datalakePath, "downloaded_books.txt");
+	public TimestampDatalakeStorage(String datalakePath, String trackingFilename) {
+		if (datalakePath == null || datalakePath.isBlank()) {
+			throw new IllegalArgumentException("datalakePath cannot be null/blank");
+		}
+		if (trackingFilename == null || trackingFilename.isBlank()) {
+			throw new IllegalArgumentException("trackingFilename cannot be null/blank");
+		}
+		this.datalakePath = datalakePath.trim();
+		this.downloadedBooksFile = Paths.get(this.datalakePath, trackingFilename.trim());
 		initializeDatalake();
 	}
 
@@ -28,7 +42,7 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 
 			if (!Files.exists(downloadedBooksFile)) {
 				Files.createFile(downloadedBooksFile);
-				logger.info("Created downloaded_books.txt tracking file");
+				logger.info("Created {} tracking file", downloadedBooksFile.getFileName());
 			}
 
 			logger.info("Timestamp-based datalake initialized at: {}", datalakePath);
@@ -125,7 +139,7 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 			String[] parts = line.split("\\|");
 			if (parts.length >= 1) {
 				try {
-					books.add(Integer.parseInt(parts[0].trim()));
+					books.add(Integer.valueOf(parts[0].trim()));
 				} catch (NumberFormatException e) {
 					logger.warn("Invalid book ID in tracking file: {}", line);
 				}
