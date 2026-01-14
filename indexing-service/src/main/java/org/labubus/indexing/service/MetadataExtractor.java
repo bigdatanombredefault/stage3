@@ -1,11 +1,11 @@
 package org.labubus.indexing.service;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import org.labubus.model.BookMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MetadataExtractor {
 	private static final Logger logger = LoggerFactory.getLogger(MetadataExtractor.class);

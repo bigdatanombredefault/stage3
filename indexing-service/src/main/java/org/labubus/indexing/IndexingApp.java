@@ -22,7 +22,10 @@ import io.javalin.Javalin;
 public class IndexingApp {
     private static final Logger logger = LoggerFactory.getLogger(IndexingApp.class);
 
-    private static final int HAZELCAST_PORT = 5701;
+    private static final String ENV_CURRENT_NODE_IP = "CURRENT_NODE_IP";
+    private static final String ENV_MASTER_NODE_IP = "MASTER_NODE_IP";
+    private static final String ENV_CLUSTER_NODES_LIST = "CLUSTER_NODES_LIST";
+    private static final String ENV_DATA_VOLUME_PATH = "DATA_VOLUME_PATH";
 
     public static void main(String[] args) {
         try {
@@ -33,13 +36,17 @@ public class IndexingApp {
             logger.info("Hazelcast instance created programmatically and joined the cluster.");
 
             // 2. Create services and background listeners
-                IndexingService indexingService = new IndexingService(
-                    hazelcastInstance,
-                    config.getProperty("datalake.path")
-                );
+            IndexingService indexingService = new IndexingService(
+                hazelcastInstance,
+                requireProperty(config, "datalake.path"),
+                requireProperty(config, "datalake.tracking.filename"),
+                requireProperty(config, "hazelcast.map.metadata.name"),
+                requireProperty(config, "hazelcast.multimap.invertedIndex.name"),
+                requireInt(config, "indexing.shard.count")
+            );
             IngestionMessageListener messageListener = new IngestionMessageListener(
-                    config.getProperty("activemq.broker.url"),
-                    config.getProperty("activemq.queue.name"),
+                    requireProperty(config, "activemq.broker.url"),
+                    requireProperty(config, "activemq.queue.name"),
                     indexingService
             );
             messageListener.start();
@@ -63,34 +70,36 @@ public class IndexingApp {
      */
     private static Config createHazelcastConfig(Properties properties) {
         Config config = new Config();
-        config.setClusterName("search-engine-cluster");
 
-        // Fixed port required for a physical cluster with host port exposure
-        config.getNetworkConfig().setPort(HAZELCAST_PORT).setPortAutoIncrement(false);
+        String clusterName = requireProperty(properties, "hazelcast.cluster.name");
+        int hazelcastPort = requireInt(properties, "hazelcast.port");
+        int backupCount = requireInt(properties, "hazelcast.backup.count");
+        String metadataMapName = requireProperty(properties, "hazelcast.map.metadata.name");
+        String invertedIndexName = requireProperty(properties, "hazelcast.multimap.invertedIndex.name");
 
-        // Ensure members advertise a routable address (host IP), not the container IP.
-        String currentNodeIp = properties.getProperty("CURRENT_NODE_IP", "localhost").trim();
-        if (!currentNodeIp.isEmpty()) {
-            config.getNetworkConfig().setPublicAddress(currentNodeIp + ":" + HAZELCAST_PORT);
-        }
+        config.setClusterName(clusterName);
 
-        MapConfig metadataMapConfig = new MapConfig("book-metadata").setBackupCount(1);
-        MultiMapConfig indexMultiMapConfig = new MultiMapConfig("inverted-index").setBackupCount(1);
+        config.getNetworkConfig().setPort(hazelcastPort).setPortAutoIncrement(false);
+
+        String currentNodeIp = requireProperty(properties, ENV_CURRENT_NODE_IP);
+        config.getNetworkConfig().setPublicAddress(currentNodeIp + ":" + hazelcastPort);
+
+        MapConfig metadataMapConfig = new MapConfig(metadataMapName).setBackupCount(backupCount);
+        MultiMapConfig indexMultiMapConfig = new MultiMapConfig(invertedIndexName).setBackupCount(backupCount);
         config.addMapConfig(metadataMapConfig);
         config.addMultiMapConfig(indexMultiMapConfig);
 
-        // Discovery: multicast is blocked in the lab, so use TCP-IP with static node list.
         config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
         config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
         var tcpIpConfig = config.getNetworkConfig().getJoin().getTcpIpConfig();
         tcpIpConfig.setEnabled(true);
         tcpIpConfig.getMembers().clear();
 
-        String nodesCsv = properties.getProperty("CLUSTER_NODES_LIST", "localhost");
+        String nodesCsv = requireProperty(properties, ENV_CLUSTER_NODES_LIST);
         Arrays.stream(nodesCsv.split(","))
             .map(String::trim)
             .filter(s -> !s.isEmpty())
-            .forEach(ip -> tcpIpConfig.addMember(ip + ":" + HAZELCAST_PORT));
+            .forEach(ip -> tcpIpConfig.addMember(ip + ":" + hazelcastPort));
 
         JavaSerializationFilterConfig javaFilterConfig = new JavaSerializationFilterConfig();
         javaFilterConfig.getWhitelist().addClasses("org.labubus.model.BookMetadata");
@@ -103,7 +112,7 @@ public class IndexingApp {
      * Creates and starts the Javalin web server for API endpoints.
      */
     private static Javalin startJavalinApp(Properties config, IndexingService indexingService) {
-        int port = Integer.parseInt(config.getProperty("server.port", "7002"));
+        int port = requireInt(config, "server.port");
         Javalin app = Javalin.create(cfg -> cfg.showJavalinBanner = false).start(port);
 
         app.get("/stats", ctx -> {
@@ -143,25 +152,44 @@ public class IndexingApp {
         // Environment variables override file properties
         properties.putAll(System.getenv());
 
-        // --- Standardized env vars (default to localhost for testing) ---
-        properties.putIfAbsent("CURRENT_NODE_IP", "localhost");
-        properties.putIfAbsent("MASTER_NODE_IP", "localhost");
-        properties.putIfAbsent("CLUSTER_NODES_LIST", "localhost");
-
         // Normalize datalake path (internal container volume path)
-        String dataVolumePath = properties.getProperty("DATA_VOLUME_PATH");
+        String dataVolumePath = properties.getProperty(ENV_DATA_VOLUME_PATH);
         if (dataVolumePath == null || dataVolumePath.isBlank()) {
-            dataVolumePath = properties.getProperty("datalake.path", "../datalake");
-            properties.setProperty("DATA_VOLUME_PATH", dataVolumePath);
+            String configuredDatalakePath = properties.getProperty("datalake.path");
+            if (configuredDatalakePath != null && !configuredDatalakePath.isBlank()) {
+                properties.setProperty(ENV_DATA_VOLUME_PATH, configuredDatalakePath.trim());
+            }
+        } else {
+            properties.setProperty(ENV_DATA_VOLUME_PATH, dataVolumePath.trim());
         }
-        properties.setProperty("datalake.path", dataVolumePath);
+
+        if (properties.getProperty(ENV_DATA_VOLUME_PATH) != null && !properties.getProperty(ENV_DATA_VOLUME_PATH).isBlank()) {
+            properties.setProperty("datalake.path", properties.getProperty(ENV_DATA_VOLUME_PATH).trim());
+        }
 
         // Compute broker URL from MASTER_NODE_IP unless explicitly set.
-        String masterIp = properties.getProperty("MASTER_NODE_IP", "localhost");
         String brokerUrl = properties.getProperty("activemq.broker.url", "");
-        if (brokerUrl.isBlank() || brokerUrl.equals("tcp://localhost:61616")) {
+        if (brokerUrl.isBlank()) {
+            String masterIp = requireProperty(properties, ENV_MASTER_NODE_IP);
             properties.setProperty("activemq.broker.url", "tcp://" + masterIp + ":61616");
         }
         return properties;
+    }
+
+    private static String requireProperty(Properties properties, String key) {
+        String value = properties.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required configuration: " + key);
+        }
+        return value.trim();
+    }
+
+    private static int requireInt(Properties properties, String key) {
+        String value = requireProperty(properties, key);
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Invalid integer for configuration '" + key + "': '" + value + "'", e);
+        }
     }
 }

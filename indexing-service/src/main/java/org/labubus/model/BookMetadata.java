@@ -1,9 +1,9 @@
 package org.labubus.model;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.io.Serial;
 import java.io.Serializable;
+
+import org.jetbrains.annotations.NotNull;
 
 public record BookMetadata(
 		int bookId,

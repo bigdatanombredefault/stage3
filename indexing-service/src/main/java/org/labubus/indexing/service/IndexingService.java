@@ -18,20 +18,49 @@ import com.hazelcast.multimap.MultiMap;
 
 public class IndexingService {
     private static final Logger logger = LoggerFactory.getLogger(IndexingService.class);
-    private static final String METADATA_MAP_NAME = "book-metadata";
-    private static final String INVERTED_INDEX_NAME = "inverted-index";
+
     private final HazelcastInstance hazelcast;
     private final DatalakeReader datalakeReader;
     private final MetadataExtractor metadataExtractor;
 
-    public IndexingService(HazelcastInstance hazelcastInstance) {
-        this(hazelcastInstance, "../datalake");
-    }
+    private final String metadataMapName;
+    private final String invertedIndexName;
+    private final int shardCount;
 
-    public IndexingService(HazelcastInstance hazelcastInstance, String datalakePath) {
+    public IndexingService(
+        HazelcastInstance hazelcastInstance,
+        String datalakePath,
+        String trackingFilename,
+        String metadataMapName,
+        String invertedIndexName,
+        int shardCount
+    ) {
+        if (hazelcastInstance == null) {
+            throw new IllegalArgumentException("hazelcastInstance cannot be null");
+        }
+        if (datalakePath == null || datalakePath.isBlank()) {
+            throw new IllegalArgumentException("datalakePath cannot be null/blank");
+        }
+        if (trackingFilename == null || trackingFilename.isBlank()) {
+            throw new IllegalArgumentException("trackingFilename cannot be null/blank");
+        }
+        if (metadataMapName == null || metadataMapName.isBlank()) {
+            throw new IllegalArgumentException("metadataMapName cannot be null/blank");
+        }
+        if (invertedIndexName == null || invertedIndexName.isBlank()) {
+            throw new IllegalArgumentException("invertedIndexName cannot be null/blank");
+        }
+        if (shardCount <= 0) {
+            throw new IllegalArgumentException("shardCount must be > 0");
+        }
+
         this.hazelcast = hazelcastInstance;
-        String effectivePath = (datalakePath == null || datalakePath.isBlank()) ? "../datalake" : datalakePath;
-        this.datalakeReader = new DatalakeReader(effectivePath);
+        this.datalakeReader = new DatalakeReader(datalakePath.trim(), trackingFilename.trim());
+
+        this.metadataMapName = metadataMapName.trim();
+        this.invertedIndexName = invertedIndexName.trim();
+        this.shardCount = shardCount;
+
         this.metadataExtractor = new MetadataExtractor();
     }
 
@@ -41,7 +70,7 @@ public class IndexingService {
      * @throws IOException if reading from the datalake fails.
      */
     public void indexBook(int bookId) throws IOException {
-        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(METADATA_MAP_NAME);
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
 
         if (metadataMap.containsKey(bookId)) {
             logger.warn("Book {} has already been indexed. Skipping to ensure idempotency.", bookId);
@@ -63,8 +92,7 @@ public class IndexingService {
         logger.info("Saved metadata to Hazelcast for book {}: {}", bookId, metadata.title());
 
         Set<String> words = extractWords(body);
-        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(INVERTED_INDEX_NAME);
-        int shardCount = 20;
+        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
 
         for (String word : words) {
             int shardId = Math.abs(word.hashCode() % shardCount);
@@ -86,8 +114,8 @@ public class IndexingService {
     public int rebuildIndex() throws IOException {
         logger.info("Starting full index rebuild in Hazelcast...");
 
-        hazelcast.getMap(METADATA_MAP_NAME).clear();
-        hazelcast.getMultiMap(INVERTED_INDEX_NAME).clear();
+        hazelcast.getMap(metadataMapName).clear();
+        hazelcast.getMultiMap(invertedIndexName).clear();
         logger.info("Cleared existing data from Hazelcast maps.");
 
         List<Integer> bookIds = datalakeReader.getDownloadedBooks();
@@ -111,8 +139,8 @@ public class IndexingService {
      * Gets statistics from the Hazelcast grid.
      */
     public IndexStats getStats() {
-        int booksIndexed = hazelcast.getMap(METADATA_MAP_NAME).size();
-        int uniqueWords = hazelcast.getMultiMap(INVERTED_INDEX_NAME).keySet().size();
+        int booksIndexed = hazelcast.getMap(metadataMapName).size();
+        int uniqueWords = hazelcast.getMultiMap(invertedIndexName).keySet().size();
         return new IndexStats(booksIndexed, uniqueWords);
     }
 

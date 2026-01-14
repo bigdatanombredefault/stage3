@@ -1,13 +1,19 @@
 package org.labubus.indexing.repository;
 
-import org.labubus.model.BookMetadata;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+
+import org.labubus.model.BookMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SqliteMetadataRepository implements MetadataRepository {
 	private static final Logger logger = LoggerFactory.getLogger(SqliteMetadataRepository.class);

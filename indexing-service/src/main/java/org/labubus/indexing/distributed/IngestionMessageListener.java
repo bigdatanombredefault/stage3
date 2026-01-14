@@ -1,6 +1,14 @@
 package org.labubus.indexing.distributed;
 
-import javax.jms.*;
+import javax.jms.Connection;
+import javax.jms.ConnectionFactory;
+import javax.jms.Destination;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.MessageConsumer;
+import javax.jms.Session;
+import javax.jms.TextMessage;
+
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.labubus.indexing.service.IndexingService;
 import org.slf4j.Logger;
@@ -18,9 +26,8 @@ public class IngestionMessageListener implements Runnable {
     private final String queueName;
     private final IndexingService indexingService;
 
-    // 'volatile' ensures that changes to this flag are visible across threads.
     private volatile boolean running = true;
-    private Connection connection; // Keep a reference to close it on shutdown
+    private Connection connection;
 
     public IngestionMessageListener(String brokerUrl, String queueName, IndexingService indexingService) {
         this.brokerUrl = brokerUrl;
@@ -43,7 +50,6 @@ public class IngestionMessageListener implements Runnable {
      */
     public void stop() {
         this.running = false;
-        // Attempt to close the connection to interrupt the blocking 'receive' call
         if (connection != null) {
             try {
                 connection.close();
@@ -67,11 +73,8 @@ public class IngestionMessageListener implements Runnable {
 
                 logger.info("Listener connected. Waiting for messages from queue '{}'...", queueName);
 
-                // Inner loop for receiving messages
                 while (running) {
-                    // We use a timeout so the loop doesn't block forever.
-                    // This allows it to check the 'running' flag periodically.
-                    Message message = consumer.receive(5000); // 5-second timeout
+                    Message message = consumer.receive(5000);
 
                     if (message instanceof TextMessage) {
                         TextMessage textMessage = (TextMessage) message;
@@ -81,14 +84,13 @@ public class IngestionMessageListener implements Runnable {
             } catch (JMSException e) {
                 if (running) {
                     logger.error("JMS connection failed: {}. Retrying in 10 seconds...", e.getMessage());
-                    sleep(10000); // Wait before attempting to reconnect
+                    sleep(10000);
                 }
             } finally {
                 if (connection != null) {
                     try {
                         connection.close();
                     } catch (JMSException e) {
-                        // Ignore errors on close
                     }
                 }
             }
@@ -100,12 +102,10 @@ public class IngestionMessageListener implements Runnable {
         try {
             int bookId = Integer.parseInt(messageText);
             logger.info("Received job: Index book {}", bookId);
-            // This is the trigger that starts the core indexing logic.
             indexingService.indexBook(bookId);
         } catch (NumberFormatException e) {
             logger.error("Received an invalid message that was not a book ID: '{}'", messageText);
         } catch (Exception e) {
-            // Catch any exception from the indexing process to prevent the listener from crashing.
             logger.error("An error occurred while trying to index book from message '{}'", messageText, e);
         }
     }
@@ -114,7 +114,7 @@ public class IngestionMessageListener implements Runnable {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // Preserve the interrupted status
+            Thread.currentThread().interrupt();
         }
     }
 }

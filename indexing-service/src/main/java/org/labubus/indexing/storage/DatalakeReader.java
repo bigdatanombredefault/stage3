@@ -1,8 +1,5 @@
 package org.labubus.indexing.storage;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,19 +8,30 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DatalakeReader {
 	private static final Logger logger = LoggerFactory.getLogger(DatalakeReader.class);
 	private final String datalakePath;
+	private final String trackingFilename;
 
-	public DatalakeReader(String datalakePath) {
-		this.datalakePath = datalakePath;
+	public DatalakeReader(String datalakePath, String trackingFilename) {
+		if (datalakePath == null || datalakePath.isBlank()) {
+			throw new IllegalArgumentException("datalakePath cannot be null/blank");
+		}
+		if (trackingFilename == null || trackingFilename.isBlank()) {
+			throw new IllegalArgumentException("trackingFilename cannot be null/blank");
+		}
+		this.datalakePath = datalakePath.trim();
+		this.trackingFilename = trackingFilename.trim();
 	}
 
 	/**
 	 * Get list of all downloaded book IDs from the tracking file
 	 */
 	public List<Integer> getDownloadedBooks() throws IOException {
-		Path trackingFile = Paths.get(datalakePath, "downloaded_books.txt");
+		Path trackingFile = Paths.get(datalakePath, trackingFilename);
 		List<Integer> bookIds = new ArrayList<>();
 
 		if (!Files.exists(trackingFile)) {
@@ -34,11 +42,9 @@ public class DatalakeReader {
 		List<String> lines = Files.readAllLines(trackingFile);
 		for (String line : lines) {
 			String[] parts = line.split("\\|");
-			String bookIdStr = parts[0].trim();
-
-			if (!bookIdStr.isEmpty()) {
+			if (parts.length > 0 && !parts[0].trim().isEmpty()) {
 				try {
-					bookIds.add(Integer.parseInt(bookIdStr));
+					bookIds.add(Integer.valueOf(parts[0].trim()));
 				} catch (NumberFormatException e) {
 					logger.warn("Invalid book ID in tracking file: {}", line);
 				}

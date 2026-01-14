@@ -1,22 +1,18 @@
 package org.labubus.indexing.controller;
 
-import com.google.gson.Gson;
-import io.javalin.Javalin;
-import io.javalin.http.Context;
-// I'm assuming IndexResponse and IndexStatusResponse are simple model classes.
-// We may need to adjust IndexStatusResponse.
+import java.util.HashMap;
+import java.util.Map;
+
 import org.labubus.indexing.model.IndexResponse;
-import org.labubus.indexing.model.IndexStatusResponse;
 import org.labubus.indexing.service.IndexingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import io.javalin.Javalin;
+import io.javalin.http.Context;
 
 public class IndexingController {
     private static final Logger logger = LoggerFactory.getLogger(IndexingController.class);
-    private static final Gson gson = new Gson();
     private final IndexingService indexingService;
 
     public IndexingController(IndexingService indexingService) {
