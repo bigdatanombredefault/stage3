@@ -10,5 +10,5 @@ RUN mvn -f search-service/pom.xml clean package -DskipTests
 FROM eclipse-temurin:17-jdk
 WORKDIR /app
 COPY --from=build /app/search-service/target/search-service-1.0.0.jar ./app.jar
-EXPOSE 7003
+EXPOSE 7003 5701
 CMD ["java", "-jar", "app.jar"]

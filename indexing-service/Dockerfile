@@ -10,4 +10,5 @@ RUN mvn -f indexing-service/pom.xml clean package -DskipTests
 FROM eclipse-temurin:17-jdk
 WORKDIR /app
 COPY --from=build /app/indexing-service/target/indexing-service-1.0.0.jar ./app.jar
+EXPOSE 7002 5701
 CMD ["java", "-jar", "app.jar"]

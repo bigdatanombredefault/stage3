@@ -1,19 +1,20 @@
 package org.labubus.indexing.service;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.cp.lock.FencedLock;
-import com.hazelcast.map.IMap;
-import com.hazelcast.multimap.MultiMap;
-import org.labubus.model.BookMetadata;
-import org.labubus.indexing.storage.DatalakeReader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import org.labubus.indexing.storage.DatalakeReader;
+import org.labubus.model.BookMetadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.cp.lock.FencedLock;
+import com.hazelcast.map.IMap;
+import com.hazelcast.multimap.MultiMap;
 
 public class IndexingService {
     private static final Logger logger = LoggerFactory.getLogger(IndexingService.class);
@@ -24,8 +25,13 @@ public class IndexingService {
     private final MetadataExtractor metadataExtractor;
 
     public IndexingService(HazelcastInstance hazelcastInstance) {
+        this(hazelcastInstance, "../datalake");
+    }
+
+    public IndexingService(HazelcastInstance hazelcastInstance, String datalakePath) {
         this.hazelcast = hazelcastInstance;
-        this.datalakeReader = new DatalakeReader("../datalake");
+        String effectivePath = (datalakePath == null || datalakePath.isBlank()) ? "../datalake" : datalakePath;
+        this.datalakeReader = new DatalakeReader(effectivePath);
         this.metadataExtractor = new MetadataExtractor();
     }
 
