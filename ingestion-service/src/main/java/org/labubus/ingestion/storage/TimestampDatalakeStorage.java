@@ -61,20 +61,26 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 
 	@Override
 	public String saveBook(int bookId, String header, String body) throws IOException {
-		Path bookPath = getTimestampPath(bookId);
-
-		Files.createDirectories(bookPath);
-
-		Path headerPath = bookPath.resolve(bookId + "_header.txt");
-		Files.writeString(headerPath, header);
-
-		Path bodyPath = bookPath.resolve(bookId + "_body.txt");
-		Files.writeString(bodyPath, body);
-
+		Path bookPath = createBookDirectory(bookId);
+		writeBookFiles(bookPath, bookId, header, body);
 		trackDownloadedBook(bookId, bookPath.toString());
-
 		logger.info("Saved book {} to {}", bookId, bookPath);
 		return bookPath.toString();
+	}
+
+	private Path createBookDirectory(int bookId) throws IOException {
+		Path bookPath = getTimestampPath(bookId);
+		Files.createDirectories(bookPath);
+		return bookPath;
+	}
+
+	private void writeBookFiles(Path bookPath, int bookId, String header, String body) throws IOException {
+		writeFile(bookPath.resolve(bookId + "_header.txt"), header);
+		writeFile(bookPath.resolve(bookId + "_body.txt"), body);
+	}
+
+	private void writeFile(Path filePath, String content) throws IOException {
+		Files.writeString(filePath, content);
 	}
 
 	@Override
@@ -91,39 +97,49 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 	@Override
 	public String getBookPath(int bookId) {
 		try {
-			if (!Files.exists(downloadedBooksFile)) {
-				return null;
-			}
-
-			List<String> lines = Files.readAllLines(downloadedBooksFile);
-			for (String line : lines) {
-				String[] parts = line.split("\\|");
-				if (parts.length == 2) {
-					int id = Integer.parseInt(parts[0].trim());
-					if (id == bookId) {
-						return parts[1].trim();
-					}
-				}
-			}
+			return findBookPath(bookId);
 		} catch (IOException e) {
 			logger.error("Error getting book path", e);
+			return null;
+		}
+	}
+
+	private String findBookPath(int bookId) throws IOException {
+		if (!Files.exists(downloadedBooksFile)) {
+			return null;
+		}
+		for (String line : Files.readAllLines(downloadedBooksFile)) {
+			String path = parsePathOrNull(line, bookId);
+			if (path != null) {
+				return path;
+			}
 		}
 		return null;
+	}
+
+	private String parsePathOrNull(String line, int bookId) {
+		String[] parts = line.split("\\|");
+		if (parts.length != 2) {
+			return null;
+		}
+		Integer parsedId = parseIdOrNull(parts[0]);
+		return parsedId != null && parsedId == bookId ? parts[1].trim() : null;
 	}
 
 	private void trackDownloadedBook(int bookId, String path) throws IOException {
 		Set<BookEntry> entries = getDownloadedBookEntries();
 		entries.add(new BookEntry(bookId, path));
+		Files.writeString(downloadedBooksFile, formatEntries(entries));
+	}
 
+	private String formatEntries(Set<BookEntry> entries) {
 		List<BookEntry> sortedEntries = new ArrayList<>(entries);
 		sortedEntries.sort(Comparator.comparingInt(e -> e.bookId));
-
 		StringBuilder content = new StringBuilder();
 		for (BookEntry entry : sortedEntries) {
 			content.append(entry.bookId).append("|").append(entry.path).append("\n");
 		}
-
-		Files.writeString(downloadedBooksFile, content.toString());
+		return content.toString();
 	}
 
 	@Override
@@ -151,26 +167,37 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 
 	private Set<BookEntry> getDownloadedBookEntries() throws IOException {
 		Set<BookEntry> entries = new HashSet<>();
-
 		if (!Files.exists(downloadedBooksFile)) {
 			return entries;
 		}
-
-		List<String> lines = Files.readAllLines(downloadedBooksFile);
-		for (String line : lines) {
-			String[] parts = line.split("\\|");
-			if (parts.length == 2) {
-				try {
-					int id = Integer.parseInt(parts[0].trim());
-					String path = parts[1].trim();
-					entries.add(new BookEntry(id, path));
-				} catch (NumberFormatException e) {
-					logger.warn("Invalid entry in tracking file: {}", line);
-				}
+		for (String line : Files.readAllLines(downloadedBooksFile)) {
+			BookEntry entry = parseEntryOrNull(line);
+			if (entry != null) {
+				entries.add(entry);
 			}
 		}
-
 		return entries;
+	}
+
+	private BookEntry parseEntryOrNull(String line) {
+		String[] parts = line.split("\\|");
+		if (parts.length != 2) {
+			return null;
+		}
+		Integer id = parseIdOrNull(parts[0]);
+		if (id == null) {
+			logger.warn("Invalid entry in tracking file: {}", line);
+			return null;
+		}
+		return new BookEntry(id, parts[1].trim());
+	}
+
+	private Integer parseIdOrNull(String value) {
+		try {
+			return Integer.valueOf(value.trim());
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	@Override

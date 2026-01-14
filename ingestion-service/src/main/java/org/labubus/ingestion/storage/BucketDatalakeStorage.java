@@ -66,20 +66,26 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 
 	@Override
 	public String saveBook(int bookId, String header, String body) throws IOException {
-		Path bucketPath = getBucketPath(bookId);
-
-		Files.createDirectories(bucketPath);
-
-		Path headerPath = bucketPath.resolve(bookId + "_header.txt");
-		Files.writeString(headerPath, header);
-
-		Path bodyPath = bucketPath.resolve(bookId + "_body.txt");
-		Files.writeString(bodyPath, body);
-
+		Path bucketPath = ensureBucketDir(bookId);
+		writeBookFiles(bucketPath, bookId, header, body);
 		trackDownloadedBook(bookId);
-
 		logger.info("Saved book {} to bucket {}", bookId, bucketPath);
 		return bucketPath.toString();
+	}
+
+	private Path ensureBucketDir(int bookId) throws IOException {
+		Path bucketPath = getBucketPath(bookId);
+		Files.createDirectories(bucketPath);
+		return bucketPath;
+	}
+
+	private void writeBookFiles(Path bucketPath, int bookId, String header, String body) throws IOException {
+		writeFile(bucketPath.resolve(bookId + "_header.txt"), header);
+		writeFile(bucketPath.resolve(bookId + "_body.txt"), body);
+	}
+
+	private void writeFile(Path filePath, String content) throws IOException {
+		Files.writeString(filePath, content);
 	}
 
 	@Override
@@ -101,40 +107,63 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 		return null;
 	}
 
-    private void trackDownloadedBook(int bookId) throws IOException {
-        // 1. Lock the file channel prevents other containers from writing simultaneously
-        try (RandomAccessFile file = new RandomAccessFile(downloadedBooksFile.toFile(), "rw");
-             FileChannel channel = file.getChannel();
-             FileLock lock = channel.lock()) { // Blocks until lock is acquired
+	private void trackDownloadedBook(int bookId) throws IOException {
+		try (RandomAccessFile file = new RandomAccessFile(downloadedBooksFile.toFile(), "rw");
+			 FileChannel channel = file.getChannel();
+			 FileLock lock = channel.lock()) {
 
-			if (!lock.isValid()) {
-				throw new IOException("Could not acquire a valid lock for tracking file: " + downloadedBooksFile);
+			ensureValidLock(lock);
+			Set<Integer> current = readTrackedBookIds(file);
+			if (current.add(bookId)) {
+				writeTrackedBookIds(file, current);
 			}
+		}
+	}
 
-            // 2. Read current content
-            Set<Integer> currentBooks = new HashSet<>();
-            String line;
-            while ((line = file.readLine()) != null) {
-                if (!line.trim().isEmpty()) {
-					currentBooks.add(Integer.valueOf(line.trim()));
-                }
-            }
+	private void ensureValidLock(FileLock lock) throws IOException {
+		if (lock.isValid()) {
+			return;
+		}
+		throw new IOException("Could not acquire a valid lock for tracking file: " + downloadedBooksFile);
+	}
 
-            // 3. Add new book
-            if (currentBooks.add(bookId)) {
-                // 4. Rewrite file
-                file.setLength(0); // Clear file
-                StringBuilder content = new StringBuilder();
-                List<Integer> sorted = new ArrayList<>(currentBooks);
-                Collections.sort(sorted);
-                for (int id : sorted) {
-                    content.append(id).append("\n");
-                }
-                file.writeBytes(content.toString());
-            }
-            // Lock is automatically released by try-with-resources
-        }
-    }
+	private Set<Integer> readTrackedBookIds(RandomAccessFile file) throws IOException {
+		Set<Integer> ids = new HashSet<>();
+		String line;
+		while ((line = file.readLine()) != null) {
+			Integer parsed = parseIdOrNull(line);
+			if (parsed != null) {
+				ids.add(parsed);
+			}
+		}
+		return ids;
+	}
+
+	private void writeTrackedBookIds(RandomAccessFile file, Set<Integer> ids) throws IOException {
+		file.setLength(0);
+		for (int id : sorted(ids)) {
+			file.writeBytes(id + "\n");
+		}
+	}
+
+	private List<Integer> sorted(Set<Integer> ids) {
+		List<Integer> sorted = new ArrayList<>(ids);
+		Collections.sort(sorted);
+		return sorted;
+	}
+
+	private Integer parseIdOrNull(String line) {
+		String trimmed = line == null ? "" : line.trim();
+		if (trimmed.isEmpty()) {
+			return null;
+		}
+		try {
+			return Integer.valueOf(trimmed);
+		} catch (NumberFormatException e) {
+			logger.warn("Invalid book ID in tracking file: {}", line);
+			return null;
+		}
+	}
 
 	@Override
 	public Set<Integer> getDownloadedBooks() throws IOException {
