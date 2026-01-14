@@ -2,6 +2,9 @@ package org.labubus.ingestion.config;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -19,7 +22,8 @@ public record IngestionConfig(
     int serverPort,
     ActiveMq activeMq,
     Datalake datalake,
-    Gutenberg gutenberg
+    Gutenberg gutenberg,
+    Replication replication
 ) {
     /** ActiveMQ connectivity settings used to publish ingestion messages. */
     public record ActiveMq(String brokerUrl, String queueName) {}
@@ -29,6 +33,18 @@ public record IngestionConfig(
 
     /** Project Gutenberg download settings. */
     public record Gutenberg(String baseUrl, int timeoutMs) {}
+
+    /**
+     * Replication settings for copying datalake content to another node.
+     */
+    public record Replication(
+        boolean enabled,
+        String currentNodeIp,
+        List<String> clusterNodes,
+        int receiverPort,
+        String receiverEndpoint,
+        Duration timeout
+    ) {}
 
     /**
      * Loads configuration from classpath properties plus environment variables.
@@ -48,7 +64,8 @@ public record IngestionConfig(
             requireInt(p, "server.port"),
             readActiveMq(p),
             readDatalake(p),
-            readGutenberg(p)
+            readGutenberg(p),
+            readReplication(p)
         );
     }
 
@@ -67,6 +84,21 @@ public record IngestionConfig(
 
     private static Gutenberg readGutenberg(Properties p) {
         return new Gutenberg(requireString(p, "gutenberg.base.url"), requireInt(p, "gutenberg.download.timeout"));
+    }
+
+    private static Replication readReplication(Properties p) {
+        boolean enabled = Boolean.parseBoolean(requireString(p, "datalake.replication.enabled"));
+        int receiverPort = requireInt(p, "datalake.replication.port");
+        String endpoint = requireString(p, "datalake.replication.endpoint");
+        Duration timeout = Duration.ofMillis(requireInt(p, "datalake.replication.timeout.ms"));
+
+        if (!enabled) {
+            return new Replication(false, null, List.of(), receiverPort, endpoint, timeout);
+        }
+
+        String currentNodeIp = requireString(p, "CURRENT_NODE_IP");
+        List<String> nodes = splitCsv(requireString(p, "CLUSTER_NODES_LIST"));
+        return new Replication(true, currentNodeIp, nodes, receiverPort, endpoint, timeout);
     }
 
     private static Properties loadProperties(String resourceName) {
@@ -99,6 +131,13 @@ public record IngestionConfig(
         }
         String masterIp = requireString(properties, "MASTER_NODE_IP");
         properties.setProperty("activemq.broker.url", "tcp://" + masterIp + ":61616");
+    }
+
+    private static List<String> splitCsv(String csv) {
+        return Arrays.stream(csv.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .toList();
     }
 
     private static String requireString(Properties properties, String key) {

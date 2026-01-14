@@ -1,7 +1,9 @@
 package org.labubus.ingestion.bootstrap;
 
 import org.labubus.ingestion.config.IngestionConfig;
+import org.labubus.ingestion.controller.DatalakeController;
 import org.labubus.ingestion.controller.IngestionController;
+import org.labubus.ingestion.distributed.DatalakeReplicationClient;
 import org.labubus.ingestion.distributed.MessageProducer;
 import org.labubus.ingestion.service.BookDownloader;
 import org.labubus.ingestion.service.BookIngestionService;
@@ -46,15 +48,17 @@ public final class IngestionBootstrap {
     }
 
     private static Javalin startHttp(IngestionConfig cfg) {
-        IngestionController controller = buildController(cfg);
-        return IngestionHttpServer.start(cfg.serverPort(), controller);
+        DatalakeStorage storage = DatalakeStorageFactory.create(cfg.datalake());
+        IngestionController ingestionController = buildIngestionController(cfg, storage);
+        DatalakeController datalakeController = new DatalakeController(storage);
+        return IngestionHttpServer.start(cfg.serverPort(), ingestionController, datalakeController);
     }
 
-    private static IngestionController buildController(IngestionConfig cfg) {
-        DatalakeStorage storage = DatalakeStorageFactory.create(cfg.datalake());
+    private static IngestionController buildIngestionController(IngestionConfig cfg, DatalakeStorage storage) {
         BookDownloader downloader = new GutenbergDownloader(cfg.gutenberg().baseUrl(), cfg.gutenberg().timeoutMs());
         MessageProducer producer = new MessageProducer(cfg.activeMq().brokerUrl(), cfg.activeMq().queueName());
-        BookIngestionService ingestionService = new BookIngestionService(storage, downloader, producer);
+        DatalakeReplicationClient replicator = new DatalakeReplicationClient(cfg.replication().timeout());
+        BookIngestionService ingestionService = new BookIngestionService(storage, downloader, producer, replicator, cfg.replication());
         return new IngestionController(ingestionService, storage);
     }
 
