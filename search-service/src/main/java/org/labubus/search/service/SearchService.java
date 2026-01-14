@@ -16,6 +16,9 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import com.hazelcast.multimap.MultiMap;
 
+/**
+ * Provides full-text search over the distributed inverted index stored in Hazelcast.
+ */
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
 
@@ -45,27 +48,53 @@ public class SearchService {
         return value.trim();
     }
 
+    /**
+     * Searches indexed books.
+     *
+     * @param query free-text query (tokenized by whitespace)
+     * @param author optional author filter
+     * @param language optional language filter
+     * @param year optional year filter
+     * @param limit optional max results (capped by {@code maxResults})
+     * @return ranked results
+     */
     public List<SearchResult> search(String query, String author, String language, Integer year, Integer limit) {
-        logger.info("Search query: '{}', author: '{}', language: '{}', year: {}, limit: {}",
-                query, author, language, year, limit);
+        logSearch(query, author, language, year, limit);
+        return doSearch(new SearchQuery(query, author, language, year, limit));
+    }
 
-        // 1. Find all matching book IDs from the Hazelcast index
-        Set<Integer> matchingBookIds = searchIndex(query);
-        if (matchingBookIds.isEmpty()) {
+    private void logSearch(String query, String author, String language, Integer year, Integer limit) {
+        logger.info("Search query: '{}', author: '{}', language: '{}', year: {}, limit: {}", query, author, language, year, limit);
+    }
+
+    private List<SearchResult> doSearch(SearchQuery query) {
+        Set<Integer> ids = searchIndex(query.query());
+        if (ids.isEmpty()) {
             return Collections.emptyList();
         }
+        List<BookMetadata> books = loadMetadata(ids);
+        List<BookMetadata> filtered = applyFilters(books, query.author(), query.language(), query.year());
+        List<SearchResult> ranked = rankResults(filtered, query.query());
+        return limit(ranked, query.limit());
+    }
 
-        // 2. Efficiently retrieve all metadata for those IDs from the Hazelcast map
+    private List<BookMetadata> loadMetadata(Set<Integer> bookIds) {
         IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
-        List<BookMetadata> matchingBooks = metadataMap.getAll(matchingBookIds).values().stream().toList();
-        logger.debug("Retrieved metadata for {} books from Hazelcast", matchingBooks.size());
+        List<BookMetadata> books = metadataMap.getAll(bookIds).values().stream().toList();
+        logger.debug("Retrieved metadata for {} books from Hazelcast", books.size());
+        return books;
+    }
 
-        // 3. Filter and rank the results (this logic is largely the same)
-        List<BookMetadata> filteredBooks = applyFilters(matchingBooks, author, language, year);
-        List<SearchResult> results = rankResults(filteredBooks, query);
-
-        int resultLimit = (limit != null && limit > 0) ? Math.min(limit, maxResults) : maxResults;
+    private List<SearchResult> limit(List<SearchResult> results, Integer limit) {
+        int resultLimit = computeResultLimit(limit);
         return results.stream().limit(resultLimit).collect(Collectors.toList());
+    }
+
+    private int computeResultLimit(Integer limit) {
+        if (limit != null && limit > 0) {
+            return Math.min(limit, maxResults);
+        }
+        return maxResults;
     }
 
     private Set<Integer> searchIndex(String query) {
@@ -77,7 +106,6 @@ public class SearchService {
         String[] words = query.toLowerCase().trim().split("\\s+");
         Set<Integer> allMatchingIds = new HashSet<>();
         for (String word : words) {
-            // .get() on a MultiMap returns a Collection of values.
             allMatchingIds.addAll(invertedIndex.get(word));
         }
         return allMatchingIds;
@@ -92,17 +120,21 @@ public class SearchService {
     }
 
     private List<SearchResult> rankResults(List<BookMetadata> books, String query) {
-        String[] queryWords = query.toLowerCase().trim().split("\\s+");
-        // Get the index once to pass into the scoring function for efficiency
+        String[] queryWords = tokenizeQuery(query);
         MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
-
         return books.stream()
-                .map(book -> {
-                    int score = calculateScore(book, queryWords, invertedIndex);
-                    return SearchResult.fromMetadata(book, score);
-                })
-                .sorted(Comparator.comparingInt(SearchResult::score).reversed())
-                .collect(Collectors.toList());
+            .map(book -> toResult(book, queryWords, invertedIndex))
+            .sorted(Comparator.comparingInt(SearchResult::score).reversed())
+            .collect(Collectors.toList());
+    }
+
+    private String[] tokenizeQuery(String query) {
+        return query.toLowerCase().trim().split("\\s+");
+    }
+
+    private SearchResult toResult(BookMetadata book, String[] queryWords, MultiMap<String, Integer> invertedIndex) {
+        int score = calculateScore(book, queryWords, invertedIndex);
+        return SearchResult.fromMetadata(book, score);
     }
 
     private int calculateScore(BookMetadata book, String[] queryWords, MultiMap<String, Integer> invertedIndex) {
@@ -114,7 +146,6 @@ public class SearchService {
             if (titleLower.contains(word)) score += 10;
             if (authorLower.contains(word)) score += 5;
 
-            // Check if the word's collection in the index contains this book's ID.
             if (invertedIndex.containsEntry(word, book.bookId())) {
                 score += 1;
             }
@@ -122,19 +153,25 @@ public class SearchService {
         return score;
     }
 
+    /**
+     * Lists all books currently stored in the metadata map.
+     *
+     * @param limit optional max results (capped by {@code maxResults})
+     * @return results with score set to {@code 0}
+     */
     public List<SearchResult> getAllBooks(Integer limit) {
-        int resultLimit = (limit != null && limit > 0) ? Math.min(limit, maxResults) : maxResults;
+        int resultLimit = computeResultLimit(limit);
         IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
-
-        // .values() gets all metadata objects from the distributed map
         return metadataMap.values().stream()
-                .limit(resultLimit)
-                .map(book -> SearchResult.fromMetadata(book, 0))
-                .collect(Collectors.toList());
+            .limit(resultLimit)
+            .map(book -> SearchResult.fromMetadata(book, 0))
+            .collect(Collectors.toList());
     }
 
     /**
-     * Get search statistics from Hazelcast.
+     * Gets search statistics from Hazelcast.
+     *
+     * @return total number of books and unique indexed words
      */
     public SearchStats getStats() {
         int totalBooks = hazelcast.getMap(metadataMapName).size();
@@ -142,5 +179,8 @@ public class SearchService {
         return new SearchStats(totalBooks, uniqueWords);
     }
 
+    /** Search statistics snapshot. */
     public record SearchStats(int totalBooks, int uniqueWords) {}
+
+    private record SearchQuery(String query, String author, String language, Integer year, Integer limit) {}
 }
