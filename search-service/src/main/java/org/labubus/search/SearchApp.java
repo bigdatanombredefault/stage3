@@ -53,6 +53,10 @@ public class SearchApp {
         MultiMapConfig indexMultiMapConfig = new MultiMapConfig("inverted-index").setBackupCount(1);
         config.addMapConfig(metadataMapConfig);
         config.addMultiMapConfig(indexMultiMapConfig);
+        config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+        config.getNetworkConfig().getJoin().getTcpIpConfig().setEnabled(true)
+                .addMember("indexing-service")
+                .addMember("search-service");
 
         JavaSerializationFilterConfig javaFilterConfig = new JavaSerializationFilterConfig();
         javaFilterConfig.getWhitelist().addClasses("org.labubus.model.BookMetadata");

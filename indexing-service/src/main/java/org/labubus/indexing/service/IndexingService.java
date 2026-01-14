@@ -1,6 +1,7 @@
 package org.labubus.indexing.service;
 
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.cp.lock.FencedLock;
 import com.hazelcast.map.IMap;
 import com.hazelcast.multimap.MultiMap;
 import org.labubus.model.BookMetadata;
@@ -57,8 +58,18 @@ public class IndexingService {
 
         Set<String> words = extractWords(body);
         MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(INVERTED_INDEX_NAME);
+        int shardCount = 20;
+
         for (String word : words) {
-            invertedIndex.put(word, bookId);
+            int shardId = Math.abs(word.hashCode() % shardCount);
+
+            FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:shard:" + shardId);
+            lock.lock();
+            try {
+                invertedIndex.put(word, bookId);
+            } finally {
+                lock.unlock();
+            }
         }
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }

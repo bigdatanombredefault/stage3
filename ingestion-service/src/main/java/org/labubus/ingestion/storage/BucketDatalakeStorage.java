@@ -1,6 +1,8 @@
 package org.labubus.ingestion.storage;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.*;
 import java.util.*;
 import org.slf4j.Logger;
@@ -82,20 +84,36 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 		return null;
 	}
 
-	private void trackDownloadedBook(int bookId) throws IOException {
-		Set<Integer> downloadedBooks = getDownloadedBooks();
-		downloadedBooks.add(bookId);
+    private void trackDownloadedBook(int bookId) throws IOException {
+        // 1. Lock the file channel prevents other containers from writing simultaneously
+        try (RandomAccessFile file = new RandomAccessFile(downloadedBooksFile.toFile(), "rw");
+             FileChannel channel = file.getChannel();
+             FileLock lock = channel.lock()) { // Blocks until lock is acquired
 
-		List<Integer> sortedBooks = new ArrayList<>(downloadedBooks);
-		Collections.sort(sortedBooks);
+            // 2. Read current content
+            Set<Integer> currentBooks = new HashSet<>();
+            String line;
+            while ((line = file.readLine()) != null) {
+                if (!line.trim().isEmpty()) {
+                    currentBooks.add(Integer.parseInt(line.trim()));
+                }
+            }
 
-		StringBuilder content = new StringBuilder();
-		for (int id : sortedBooks) {
-			content.append(id).append("\n");
-		}
-
-		Files.writeString(downloadedBooksFile, content.toString());
-	}
+            // 3. Add new book
+            if (currentBooks.add(bookId)) {
+                // 4. Rewrite file
+                file.setLength(0); // Clear file
+                StringBuilder content = new StringBuilder();
+                List<Integer> sorted = new ArrayList<>(currentBooks);
+                Collections.sort(sorted);
+                for (int id : sorted) {
+                    content.append(id).append("\n");
+                }
+                file.writeBytes(content.toString());
+            }
+            // Lock is automatically released by try-with-resources
+        }
+    }
 
 	@Override
 	public Set<Integer> getDownloadedBooks() throws IOException {
