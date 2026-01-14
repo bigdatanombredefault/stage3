@@ -5,7 +5,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -53,6 +56,47 @@ public class DatalakeReader {
 
 		logger.info("Found {} downloaded books in datalake", bookIds.size());
 		return bookIds;
+	}
+
+	/**
+	 * Scans the local datalake directory for book files and returns discovered book IDs.
+	 *
+	 * <p>This is used for disaster recovery when Hazelcast state is empty and the tracking
+	 * file may be missing or incomplete.</p>
+	 */
+	public List<Integer> scanBookIdsFromFiles() throws IOException {
+		Path datalakeDir = Paths.get(datalakePath);
+		if (!Files.exists(datalakeDir)) {
+			return List.of();
+		}
+
+		Set<Integer> ids = new HashSet<>();
+		try (Stream<Path> paths = Files.walk(datalakeDir)) {
+			paths
+				.filter(Files::isRegularFile)
+				.map(p -> p.getFileName().toString())
+				.filter(name -> name.endsWith("_body.txt"))
+				.map(this::parseBodyFilenameOrNull)
+				.filter(id -> id != null)
+				.forEach(ids::add);
+		}
+
+		List<Integer> list = new ArrayList<>(ids);
+		Collections.sort(list);
+		return list;
+	}
+
+	private Integer parseBodyFilenameOrNull(String filename) {
+		String suffix = "_body.txt";
+		if (filename == null || !filename.endsWith(suffix)) {
+			return null;
+		}
+		String prefix = filename.substring(0, filename.length() - suffix.length());
+		try {
+			return Integer.valueOf(prefix);
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	/**

@@ -42,10 +42,25 @@ public final class IndexingBootstrap {
         IndexingConfig cfg = IndexingConfig.load();
         HazelcastInstance hz = startHazelcast(cfg);
         IndexingService service = buildService(hz, cfg);
+        runStartupConsistencyCheck(service);
         IngestionMessageListener listener = startListener(cfg, service);
         Javalin app = startHttp(cfg, service);
         addShutdownHook(hz, listener, app);
         logger.info("Indexing Service started successfully.");
+    }
+
+    private static void runStartupConsistencyCheck(IndexingService service) {
+        if (!service.isInvertedIndexEmpty()) {
+            return;
+        }
+
+        logger.warn("Hazelcast inverted index is empty. Entering re-indexing mode...");
+        try {
+            int rebuilt = service.rebuildIndexFromLocalFiles();
+            logger.info("Re-indexing mode complete. Indexed {} books.", rebuilt);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Failed to rebuild index from local datalake", e);
+        }
     }
 
     private static HazelcastInstance startHazelcast(IndexingConfig cfg) {

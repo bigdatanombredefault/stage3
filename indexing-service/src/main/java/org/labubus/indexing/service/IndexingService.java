@@ -142,6 +142,26 @@ public class IndexingService {
         return successCount;
     }
 
+    /**
+     * Returns {@code true} when the inverted index is empty in Hazelcast.
+     */
+    public boolean isInvertedIndexEmpty() {
+        return hazelcast.getMultiMap(invertedIndexName).keySet().isEmpty();
+    }
+
+    /**
+     * Clears the index and re-indexes all books discovered by scanning the local datalake files.
+     */
+    public int rebuildIndexFromLocalFiles() throws IOException {
+        logger.info("Starting disaster-recovery index rebuild from local datalake files...");
+        clearIndex();
+        List<Integer> bookIds = datalakeReader.scanBookIdsFromFiles();
+        logger.info("Discovered {} books from local filesystem scan", bookIds.size());
+        int successCount = indexAll(bookIds);
+        logger.info("Disaster-recovery rebuild complete: {} books succeeded.", successCount);
+        return successCount;
+    }
+
     private void clearIndex() {
         hazelcast.getMap(metadataMapName).clear();
         hazelcast.getMultiMap(invertedIndexName).clear();
