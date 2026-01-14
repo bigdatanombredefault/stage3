@@ -22,7 +22,8 @@ import io.javalin.Javalin;
 public class SearchApp {
     private static final Logger logger = LoggerFactory.getLogger(SearchApp.class);
 
-    private static final int HAZELCAST_PORT = 5701;
+    private static final String ENV_CURRENT_NODE_IP = "CURRENT_NODE_IP";
+    private static final String ENV_CLUSTER_NODES_LIST = "CLUSTER_NODES_LIST";
 
     public static void main(String[] args) {
         try {
@@ -52,34 +53,36 @@ public class SearchApp {
      */
     private static Config createHazelcastConfig(Properties properties) {
         Config config = new Config();
-        config.setClusterName("search-engine-cluster");
 
-        // Fixed port required for a physical cluster with host port exposure
-        config.getNetworkConfig().setPort(HAZELCAST_PORT).setPortAutoIncrement(false);
+        String clusterName = requireProperty(properties, "hazelcast.cluster.name");
+        int hazelcastPort = requireInt(properties, "hazelcast.port");
+        int backupCount = requireInt(properties, "hazelcast.backup.count");
+        String metadataMapName = requireProperty(properties, "hazelcast.map.metadata.name");
+        String invertedIndexName = requireProperty(properties, "hazelcast.multimap.invertedIndex.name");
 
-        // Ensure members advertise a routable address (host IP), not the container IP.
-        String currentNodeIp = properties.getProperty("CURRENT_NODE_IP", "localhost").trim();
-        if (!currentNodeIp.isEmpty()) {
-            config.getNetworkConfig().setPublicAddress(currentNodeIp + ":" + HAZELCAST_PORT);
-        }
+        config.setClusterName(clusterName);
 
-        MapConfig metadataMapConfig = new MapConfig("book-metadata").setBackupCount(1);
-        MultiMapConfig indexMultiMapConfig = new MultiMapConfig("inverted-index").setBackupCount(1);
+        config.getNetworkConfig().setPort(hazelcastPort).setPortAutoIncrement(false);
+
+        String currentNodeIp = requireProperty(properties, ENV_CURRENT_NODE_IP);
+        config.getNetworkConfig().setPublicAddress(currentNodeIp + ":" + hazelcastPort);
+
+        MapConfig metadataMapConfig = new MapConfig(metadataMapName).setBackupCount(backupCount);
+        MultiMapConfig indexMultiMapConfig = new MultiMapConfig(invertedIndexName).setBackupCount(backupCount);
         config.addMapConfig(metadataMapConfig);
         config.addMultiMapConfig(indexMultiMapConfig);
 
-        // Discovery: multicast is blocked in the lab, so use TCP-IP with static node list.
         config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
         config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(false);
         var tcpIpConfig = config.getNetworkConfig().getJoin().getTcpIpConfig();
         tcpIpConfig.setEnabled(true);
         tcpIpConfig.getMembers().clear();
 
-        String nodesCsv = properties.getProperty("CLUSTER_NODES_LIST", "localhost");
+        String nodesCsv = requireProperty(properties, ENV_CLUSTER_NODES_LIST);
         Arrays.stream(nodesCsv.split(","))
             .map(String::trim)
             .filter(s -> !s.isEmpty())
-            .forEach(ip -> tcpIpConfig.addMember(ip + ":" + HAZELCAST_PORT));
+            .forEach(ip -> tcpIpConfig.addMember(ip + ":" + hazelcastPort));
 
         JavaSerializationFilterConfig javaFilterConfig = new JavaSerializationFilterConfig();
         javaFilterConfig.getWhitelist().addClasses("org.labubus.model.BookMetadata");
@@ -92,15 +95,16 @@ public class SearchApp {
      * Creates and starts the Javalin web server, including services and controllers.
      */
     private static Javalin startJavalinApp(Properties config, HazelcastInstance hazelcastInstance) {
-        int port = Integer.parseInt(config.getProperty("server.port", "7003"));
-        int maxResults = Integer.parseInt(config.getProperty("search.max.results", "100"));
-        int defaultLimit = Integer.parseInt(config.getProperty("search.default.limit", "10"));
+        int port = requireInt(config, "server.port");
+        int maxResults = requireInt(config, "search.max.results");
+        int defaultLimit = requireInt(config, "search.default.limit");
 
-        // Create the services and controllers
-        SearchService searchService = new SearchService(hazelcastInstance, maxResults);
+        String metadataMapName = requireProperty(config, "hazelcast.map.metadata.name");
+        String invertedIndexName = requireProperty(config, "hazelcast.multimap.invertedIndex.name");
+
+        SearchService searchService = new SearchService(hazelcastInstance, maxResults, metadataMapName, invertedIndexName);
         SearchController controller = new SearchController(searchService, defaultLimit);
 
-        // Start the web server
         Javalin app = Javalin.create(cfg -> cfg.showJavalinBanner = false).start(port);
         controller.registerRoutes(app);
 
@@ -132,16 +136,25 @@ public class SearchApp {
         } catch (IOException e) {
             logger.warn("Could not load application.properties", e);
         }
-        // Environment variables will override any properties from the file
         properties.putAll(System.getenv());
 
-        // --- Standardized env vars (default to localhost for testing) ---
-        properties.putIfAbsent("CURRENT_NODE_IP", "localhost");
-        properties.putIfAbsent("MASTER_NODE_IP", "localhost");
-        properties.putIfAbsent("CLUSTER_NODES_LIST", "localhost");
-
-        // Keep a consistent key for the datalake path even though search-service doesn't use it directly.
-        properties.putIfAbsent("DATA_VOLUME_PATH", "/app/datalake");
         return properties;
+    }
+
+    private static String requireProperty(Properties properties, String key) {
+        String value = properties.getProperty(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("Missing required configuration: " + key);
+        }
+        return value.trim();
+    }
+
+    private static int requireInt(Properties properties, String key) {
+        String value = requireProperty(properties, key);
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Invalid integer for configuration '" + key + "': '" + value + "'", e);
+        }
     }
 }

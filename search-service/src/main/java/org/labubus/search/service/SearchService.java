@@ -1,28 +1,48 @@
 package org.labubus.search.service;
 
-import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.map.IMap;
-import com.hazelcast.multimap.MultiMap;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.labubus.model.BookMetadata;
 import org.labubus.search.model.SearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import com.hazelcast.multimap.MultiMap;
 
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
 
-    private static final String METADATA_MAP_NAME = "book-metadata";
-    private static final String INVERTED_INDEX_NAME = "inverted-index";
-
     private final HazelcastInstance hazelcast;
     private final int maxResults;
 
-    public SearchService(HazelcastInstance hazelcast, int maxResults) {
+    private final String metadataMapName;
+    private final String invertedIndexName;
+
+    public SearchService(HazelcastInstance hazelcast, int maxResults, String metadataMapName, String invertedIndexName) {
+        if (hazelcast == null) {
+            throw new IllegalArgumentException("hazelcast cannot be null");
+        }
+        if (maxResults <= 0) {
+            throw new IllegalArgumentException("maxResults must be > 0");
+        }
         this.hazelcast = hazelcast;
         this.maxResults = maxResults;
+        this.metadataMapName = requireNonBlank(metadataMapName, "metadataMapName");
+        this.invertedIndexName = requireNonBlank(invertedIndexName, "invertedIndexName");
+    }
+
+    private static String requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " cannot be null/blank");
+        }
+        return value.trim();
     }
 
     public List<SearchResult> search(String query, String author, String language, Integer year, Integer limit) {
@@ -36,7 +56,7 @@ public class SearchService {
         }
 
         // 2. Efficiently retrieve all metadata for those IDs from the Hazelcast map
-        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(METADATA_MAP_NAME);
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
         List<BookMetadata> matchingBooks = metadataMap.getAll(matchingBookIds).values().stream().toList();
         logger.debug("Retrieved metadata for {} books from Hazelcast", matchingBooks.size());
 
@@ -53,7 +73,7 @@ public class SearchService {
             return Collections.emptySet();
         }
 
-        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(INVERTED_INDEX_NAME);
+        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
         String[] words = query.toLowerCase().trim().split("\\s+");
         Set<Integer> allMatchingIds = new HashSet<>();
         for (String word : words) {
@@ -74,7 +94,7 @@ public class SearchService {
     private List<SearchResult> rankResults(List<BookMetadata> books, String query) {
         String[] queryWords = query.toLowerCase().trim().split("\\s+");
         // Get the index once to pass into the scoring function for efficiency
-        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(INVERTED_INDEX_NAME);
+        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
 
         return books.stream()
                 .map(book -> {
@@ -104,7 +124,7 @@ public class SearchService {
 
     public List<SearchResult> getAllBooks(Integer limit) {
         int resultLimit = (limit != null && limit > 0) ? Math.min(limit, maxResults) : maxResults;
-        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(METADATA_MAP_NAME);
+        IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
 
         // .values() gets all metadata objects from the distributed map
         return metadataMap.values().stream()
@@ -117,8 +137,8 @@ public class SearchService {
      * Get search statistics from Hazelcast.
      */
     public SearchStats getStats() {
-        int totalBooks = hazelcast.getMap(METADATA_MAP_NAME).size();
-        int uniqueWords = hazelcast.getMultiMap(INVERTED_INDEX_NAME).keySet().size();
+        int totalBooks = hazelcast.getMap(metadataMapName).size();
+        int uniqueWords = hazelcast.getMultiMap(invertedIndexName).keySet().size();
         return new SearchStats(totalBooks, uniqueWords);
     }
 
