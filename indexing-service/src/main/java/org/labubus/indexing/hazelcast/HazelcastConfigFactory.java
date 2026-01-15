@@ -1,5 +1,9 @@
 package org.labubus.indexing.hazelcast;
 
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
+
 import org.labubus.indexing.config.IndexingConfig;
 
 import com.hazelcast.config.Config;
@@ -42,9 +46,50 @@ public final class HazelcastConfigFactory {
 
     private static void configureNetwork(Config config, IndexingConfig.Hazelcast s) {
         config.getNetworkConfig().setPort(s.port()).setPortAutoIncrement(false);
-        config.getNetworkConfig().getInterfaces().setEnabled(true).addInterface(s.currentNodeIp());
+
+        // In Docker, the container typically does NOT have the host's physical IP.
+        // If we force interface matching to CURRENT_NODE_IP in that situation, Hazelcast fails to start.
+        // So we only enable interface matching when CURRENT_NODE_IP is actually assigned locally.
+        if (isLocalInterfaceAddress(s.currentNodeIp())) {
+            config.getNetworkConfig().getInterfaces().setEnabled(true).addInterface(s.currentNodeIp());
+        } else {
+            config.getNetworkConfig().getInterfaces().setEnabled(false);
+        }
+
+        // Still advertise the node's externally reachable address (host IP + published port).
         config.getNetworkConfig().setPublicAddress(s.currentNodeIp() + ":" + s.port());
         configureJoin(config, s);
+    }
+
+    private static boolean isLocalInterfaceAddress(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return false;
+        }
+        String trimmed = ip.trim();
+        if ("localhost".equalsIgnoreCase(trimmed) || "127.0.0.1".equals(trimmed)) {
+            return true;
+        }
+
+        try {
+            InetAddress target = InetAddress.getByName(trimmed);
+            Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
+            if (ifaces == null) {
+                return false;
+            }
+            while (ifaces.hasMoreElements()) {
+                NetworkInterface nif = ifaces.nextElement();
+                Enumeration<InetAddress> addrs = nif.getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    InetAddress addr = addrs.nextElement();
+                    if (addr.equals(target)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (java.net.UnknownHostException | java.net.SocketException | SecurityException ignored) {
+            // If anything goes wrong (DNS, permissions), fall back to disabling interface matching.
+        }
+        return false;
     }
 
     private static void configureCpSubsystem(Config config, IndexingConfig.Hazelcast s) {
