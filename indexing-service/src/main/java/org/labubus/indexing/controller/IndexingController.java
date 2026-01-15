@@ -1,5 +1,6 @@
 package org.labubus.indexing.controller;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -37,7 +38,7 @@ public class IndexingController {
             IndexingService.IndexStats stats = indexingService.getStats();
             health.put("books_indexed", stats.booksIndexed());
             health.put("unique_words", stats.uniqueWords());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             health.put("books_indexed", "error");
             logger.error("Error getting stats for health check", e);
         }
@@ -56,10 +57,22 @@ public class IndexingController {
         } catch (NumberFormatException e) {
             ctx.status(400).json(IndexResponse.failed(-1, "Invalid book_id format. Must be an integer."));
             logger.warn("Invalid book_id format in request: {}", bookIdParam);
-        } catch (Exception e) {
+        } catch (IOException e) {
+            logger.warn("Failed to index book {} due to IO error: {}", bookIdParam, e.getMessage(), e);
+            int bookId = -1;
+            try {
+                bookId = Integer.parseInt(bookIdParam);
+            } catch (NumberFormatException ignored) {
+            }
+            int status = (e.getMessage() != null && e.getMessage().contains("not found")) ? 404 : 500;
+            ctx.status(status).json(IndexResponse.failed(bookId, e.getMessage()));
+        } catch (RuntimeException e) {
             logger.error("Failed to index book {}: {}", bookIdParam, e.getMessage(), e);
             int bookId = -1;
-            try { bookId = Integer.parseInt(bookIdParam); } catch (NumberFormatException ignored) {}
+            try {
+                bookId = Integer.parseInt(bookIdParam);
+            } catch (NumberFormatException ignored) {
+            }
             ctx.status(500).json(IndexResponse.failed(bookId, e.getMessage()));
         }
     }
@@ -74,7 +87,10 @@ public class IndexingController {
             );
             ctx.status(200).json(response);
             logger.info("Successfully rebuilt index with {} books", booksIndexed);
-        } catch (Exception e) {
+        } catch (IOException e) {
+            logger.error("Failed to rebuild index due to IO error", e);
+            ctx.status(500).json(Map.of("status", "failed", "error", e.getMessage()));
+        } catch (RuntimeException e) {
             logger.error("Failed to rebuild index", e);
             ctx.status(500).json(Map.of("status", "failed", "error", e.getMessage()));
         }
@@ -94,7 +110,7 @@ public class IndexingController {
             logger.debug("Retrieved index status: {} books, {} unique words",
                     stats.booksIndexed(), stats.uniqueWords());
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             logger.error("Failed to get index status", e);
             ctx.status(500).json(Map.of("error", "Failed to retrieve index status: " + e.getMessage()));
         }
