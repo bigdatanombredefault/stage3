@@ -67,8 +67,7 @@ class IndexingServiceTest {
 			datalakeDir.toString(),
 			"downloaded.txt",
 			"metadata",
-			"inverted",
-			1
+			"inverted"
 		);
 
 		assertTrue(indexingService.isInvertedIndexEmpty());
@@ -76,7 +75,7 @@ class IndexingServiceTest {
 		assertEquals(1, rebuilt);
 		assertFalse(indexingService.isInvertedIndexEmpty());
 		assertTrue(hazelcast.getMap("metadata").containsKey(1));
-		assertTrue(hazelcast.getMultiMap("inverted").containsEntry("hello", 1));
+		assertTrue(hazelcast.getMultiMap("inverted").containsEntry("hello", "1"));
 		} finally {
 			for (HazelcastInstance instance : instances) {
 				instance.shutdown();

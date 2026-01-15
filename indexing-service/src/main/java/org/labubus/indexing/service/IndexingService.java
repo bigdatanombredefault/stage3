@@ -25,15 +25,13 @@ public class IndexingService {
 
     private final String metadataMapName;
     private final String invertedIndexName;
-    private final int shardCount;
 
     public IndexingService(
         HazelcastInstance hazelcastInstance,
         String datalakePath,
         String trackingFilename,
         String metadataMapName,
-        String invertedIndexName,
-        int shardCount
+        String invertedIndexName
     ) {
         if (hazelcastInstance == null) {
             throw new IllegalArgumentException("hazelcastInstance cannot be null");
@@ -50,16 +48,12 @@ public class IndexingService {
         if (invertedIndexName == null || invertedIndexName.isBlank()) {
             throw new IllegalArgumentException("invertedIndexName cannot be null/blank");
         }
-        if (shardCount <= 0) {
-            throw new IllegalArgumentException("shardCount must be > 0");
-        }
 
         this.hazelcast = hazelcastInstance;
         this.datalakeReader = new DatalakeReader(datalakePath.trim(), trackingFilename.trim());
 
         this.metadataMapName = metadataMapName.trim();
         this.invertedIndexName = invertedIndexName.trim();
-        this.shardCount = shardCount;
 
         this.metadataExtractor = new MetadataExtractor();
     }
@@ -113,20 +107,29 @@ public class IndexingService {
 
     private void indexWords(int bookId, String body) {
         Set<String> words = extractWords(body);
-        MultiMap<String, Integer> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
-        words.forEach(word -> indexWord(invertedIndex, word, bookId));
+        MultiMap<String, String> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
+        String docId = String.valueOf(bookId);
+        words.forEach(word -> indexWord(invertedIndex, word, docId));
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }
 
-    private void indexWord(MultiMap<String, Integer> invertedIndex, String word, int bookId) {
-        int shardId = Math.abs(word.hashCode() % shardCount);
-        FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:shard:" + shardId);
+    private void indexWord(MultiMap<String, String> invertedIndex, String word, String docId) {
+        if (word == null || word.isBlank()) {
+            return;
+        }
+        String lockName = lockNameForWord(word);
+        FencedLock lock = hazelcast.getCPSubsystem().getLock(lockName);
         lock.lock();
         try {
-            invertedIndex.put(word, bookId);
+            invertedIndex.put(word, docId);
         } finally {
             lock.unlock();
         }
+    }
+
+    private String lockNameForWord(String word) {
+        String normalized = word.trim().toLowerCase();
+        return "lock:inverted-index:" + normalized;
     }
 
     /**

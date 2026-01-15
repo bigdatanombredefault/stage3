@@ -32,10 +32,10 @@ class SearchServiceTest {
 		hazelcast.getMap(metadataMapName).put(1, book1);
 		hazelcast.getMap(metadataMapName).put(2, book2);
 
-		MultiMap<String, Integer> index = hazelcast.getMultiMap(invertedIndexName);
-		index.put("magic", 1);
-		index.put("mountain", 1);
-		index.put("plain", 2);
+		MultiMap<String, String> index = hazelcast.getMultiMap(invertedIndexName);
+		index.put("magic", "1");
+		index.put("mountain", "1");
+		index.put("plain", "2");
 
 		SearchService service = new SearchService(hazelcast, 10, metadataMapName, invertedIndexName);
 		List<SearchResult> results = service.search("magic", null, null, null, 10);
@@ -62,9 +62,9 @@ class SearchServiceTest {
 		hazelcast.getMap(metadataMapName).put(1, book1);
 		hazelcast.getMap(metadataMapName).put(2, book2);
 
-		MultiMap<String, Integer> index = hazelcast.getMultiMap(invertedIndexName);
-		index.put("test", 1);
-		index.put("test", 2);
+		MultiMap<String, String> index = hazelcast.getMultiMap(invertedIndexName);
+		index.put("test", "1");
+		index.put("test", "2");
 
 		SearchService service = new SearchService(hazelcast, 10, metadataMapName, invertedIndexName);
 		List<SearchResult> results = service.search("test", null, null, 2000, 10);

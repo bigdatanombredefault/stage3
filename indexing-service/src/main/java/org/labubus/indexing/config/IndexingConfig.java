@@ -21,14 +21,14 @@ public record IndexingConfig(
     int serverPort,
     Hazelcast hazelcast,
     ActiveMq activeMq,
-    Datalake datalake,
-    int shardCount
+    Datalake datalake
 ) {
     /** Hazelcast cluster and data-structure settings used by the Indexing Service. */
     public record Hazelcast(
         String clusterName,
         int port,
         int backupCount,
+        int asyncBackupCount,
         String currentNodeIp,
         List<String> members,
         String metadataMapName,
@@ -59,8 +59,7 @@ public record IndexingConfig(
             requireInt(p, "server.port"),
             readHazelcast(p),
             readActiveMq(p),
-            readDatalake(p),
-            requireInt(p, "indexing.shard.count")
+            readDatalake(p)
         );
     }
 
@@ -69,6 +68,7 @@ public record IndexingConfig(
             requireString(p, "hazelcast.cluster.name"),
             requireInt(p, "hazelcast.port"),
             requireInt(p, "hazelcast.backup.count"),
+            requireInt(p, "hazelcast.async.backup.count"),
             requireString(p, "CURRENT_NODE_IP"),
             splitCsv(requireString(p, "CLUSTER_NODES_LIST")),
             requireString(p, "hazelcast.map.metadata.name"),

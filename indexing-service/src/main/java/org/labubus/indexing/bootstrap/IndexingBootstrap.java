@@ -74,8 +74,7 @@ public final class IndexingBootstrap {
             cfg.datalake().path(),
             cfg.datalake().trackingFilename(),
             cfg.hazelcast().metadataMapName(),
-            cfg.hazelcast().invertedIndexName(),
-            cfg.shardCount()
+            cfg.hazelcast().invertedIndexName()
         );
     }
 

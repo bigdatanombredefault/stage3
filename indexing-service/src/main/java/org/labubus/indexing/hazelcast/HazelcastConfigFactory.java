@@ -3,9 +3,14 @@ package org.labubus.indexing.hazelcast;
 import org.labubus.indexing.config.IndexingConfig;
 
 import com.hazelcast.config.Config;
+import com.hazelcast.config.EvictionPolicy;
+import com.hazelcast.config.InMemoryFormat;
 import com.hazelcast.config.JavaSerializationFilterConfig;
 import com.hazelcast.config.MapConfig;
+import com.hazelcast.config.MaxSizePolicy;
 import com.hazelcast.config.MultiMapConfig;
+import com.hazelcast.config.MultiMapConfig.ValueCollectionType;
+import com.hazelcast.config.NearCacheConfig;
 
 /**
  * Builds Hazelcast {@link Config} for the Indexing Service.
@@ -25,6 +30,7 @@ public final class HazelcastConfigFactory {
         Config config = new Config();
         configureCluster(config, settings);
         configureNetwork(config, settings);
+        configureCpSubsystem(config, settings);
         configureDataStructures(config, settings);
         configureSerialization(config);
         return config;
@@ -36,8 +42,15 @@ public final class HazelcastConfigFactory {
 
     private static void configureNetwork(Config config, IndexingConfig.Hazelcast s) {
         config.getNetworkConfig().setPort(s.port()).setPortAutoIncrement(false);
+        config.getNetworkConfig().getInterfaces().setEnabled(true).addInterface(s.currentNodeIp());
         config.getNetworkConfig().setPublicAddress(s.currentNodeIp() + ":" + s.port());
         configureJoin(config, s);
+    }
+
+    private static void configureCpSubsystem(Config config, IndexingConfig.Hazelcast s) {
+        int cpMembers = Math.max(1, Math.min(3, s.members().size()));
+        config.getCPSubsystemConfig().setCPMemberCount(cpMembers);
+        config.getCPSubsystemConfig().setGroupSize(cpMembers);
     }
 
     private static void configureJoin(Config config, IndexingConfig.Hazelcast s) {
@@ -48,12 +61,48 @@ public final class HazelcastConfigFactory {
         var tcpIp = join.getTcpIpConfig();
         tcpIp.setEnabled(true);
         tcpIp.getMembers().clear();
-        s.members().forEach(ip -> tcpIp.addMember(ip + ":" + s.port()));
+        s.members().forEach(member -> tcpIp.addMember(normalizeMemberAddress(member, s.port())));
+    }
+
+    private static String normalizeMemberAddress(String member, int defaultPort) {
+        if (member == null) {
+            return "";
+        }
+        String trimmed = member.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
+        // Accept either "ip" (uses defaultPort) or "ip:port".
+        // This keeps the old behavior but enables multiple Hazelcast members per host.
+        if (trimmed.contains(":")) {
+            return trimmed;
+        }
+        return trimmed + ":" + defaultPort;
     }
 
     private static void configureDataStructures(Config config, IndexingConfig.Hazelcast s) {
-        config.addMapConfig(new MapConfig(s.metadataMapName()).setBackupCount(s.backupCount()));
-        config.addMultiMapConfig(new MultiMapConfig(s.invertedIndexName()).setBackupCount(s.backupCount()));
+        MapConfig metadataCfg = new MapConfig(s.metadataMapName())
+            .setBackupCount(s.backupCount())
+            .setAsyncBackupCount(s.asyncBackupCount());
+        metadataCfg.getEvictionConfig()
+            .setEvictionPolicy(EvictionPolicy.LRU)
+            .setMaxSizePolicy(MaxSizePolicy.PER_NODE)
+            .setSize(100_000);
+        metadataCfg.setNearCacheConfig(
+            new NearCacheConfig()
+                .setInMemoryFormat(InMemoryFormat.OBJECT)
+                .setInvalidateOnChange(true)
+                .setCacheLocalEntries(true)
+        );
+        config.addMapConfig(metadataCfg);
+
+        config.addMultiMapConfig(
+            new MultiMapConfig(s.invertedIndexName())
+                .setBackupCount(s.backupCount())
+                .setAsyncBackupCount(s.asyncBackupCount())
+                .setValueCollectionType(ValueCollectionType.SET)
+        );
     }
 
     private static void configureSerialization(Config config) {
