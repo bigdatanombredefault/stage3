@@ -1,12 +1,10 @@
 package org.labubus.search;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.util.List;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.labubus.model.BookMetadata;
 import org.labubus.search.model.SearchResult;
@@ -19,22 +17,12 @@ import com.hazelcast.multimap.MultiMap;
 
 class SearchServiceTest {
 
-	private HazelcastInstance hazelcast;
-
-	@AfterEach
-	@SuppressWarnings("unused")
-	public void tearDown() {
-		if (hazelcast != null) {
-			hazelcast.shutdown();
-			hazelcast = null;
-		}
-	}
-
 	@Test
 	void searchService_search_returnsRankedResults() {
 		Config config = new Config();
 		config.setClusterName("test-" + UUID.randomUUID());
-		hazelcast = Hazelcast.newHazelcastInstance(config);
+		HazelcastInstance hazelcast = Hazelcast.newHazelcastInstance(config);
+		try {
 
 		String metadataMapName = "metadata";
 		String invertedIndexName = "inverted";
@@ -54,13 +42,17 @@ class SearchServiceTest {
 		assertEquals(1, results.size());
 		assertEquals(1, results.get(0).bookId());
 		assertTrue(results.get(0).score() > 0);
+		} finally {
+			hazelcast.shutdown();
+		}
 	}
 
 	@Test
 	void searchService_filtersByYear() {
 		Config config = new Config();
 		config.setClusterName("test-" + UUID.randomUUID());
-		hazelcast = Hazelcast.newHazelcastInstance(config);
+		HazelcastInstance hazelcast = Hazelcast.newHazelcastInstance(config);
+		try {
 
 		String metadataMapName = "metadata";
 		String invertedIndexName = "inverted";
@@ -78,5 +70,8 @@ class SearchServiceTest {
 		List<SearchResult> results = service.search("test", null, null, 2000, 10);
 		assertEquals(1, results.size());
 		assertEquals(2, results.get(0).bookId());
+		} finally {
+			hazelcast.shutdown();
+		}
 	}
 }

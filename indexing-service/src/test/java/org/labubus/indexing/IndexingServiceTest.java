@@ -1,9 +1,5 @@
 package org.labubus.indexing;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,7 +7,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.labubus.indexing.service.IndexingService;
@@ -22,17 +20,6 @@ import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 
 class IndexingServiceTest {
-
-	private final List<HazelcastInstance> instances = new ArrayList<>();
-
-	@AfterEach
-	@SuppressWarnings("unused")
-	public void tearDown() {
-		for (HazelcastInstance instance : instances) {
-			instance.shutdown();
-		}
-		instances.clear();
-	}
 
 	@Test
 	void datalakeReader_scanBookIdsFromFiles_findsSortedIds(@TempDir Path datalakeDir) throws Exception {
@@ -49,6 +36,9 @@ class IndexingServiceTest {
 	void indexingService_rebuildIndexFromLocalFiles_populatesHazelcast(@TempDir Path datalakeDir) throws Exception {
 		Files.writeString(datalakeDir.resolve("1_header.txt"), "Title: One\nAuthor: A\nLanguage: en\nRelease Date: 2001");
 		Files.writeString(datalakeDir.resolve("1_body.txt"), "hello world");
+
+		List<HazelcastInstance> instances = new ArrayList<>();
+		try {
 
 		String clusterName = "test-" + UUID.randomUUID();
 		int basePort = findFreePort();
@@ -87,6 +77,11 @@ class IndexingServiceTest {
 		assertFalse(indexingService.isInvertedIndexEmpty());
 		assertTrue(hazelcast.getMap("metadata").containsKey(1));
 		assertTrue(hazelcast.getMultiMap("inverted").containsEntry("hello", 1));
+		} finally {
+			for (HazelcastInstance instance : instances) {
+				instance.shutdown();
+			}
+		}
 	}
 
 	private static int findFreePort() throws Exception {
