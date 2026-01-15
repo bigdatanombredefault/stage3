@@ -1,5 +1,7 @@
 package org.labubus.indexing.distributed;
 
+import java.io.IOException;
+
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.Destination;
@@ -90,8 +92,7 @@ public class IngestionMessageListener implements Runnable {
                 while (running) {
                     Message message = consumer.receive(5000);
 
-                    if (message instanceof TextMessage) {
-                        TextMessage textMessage = (TextMessage) message;
+                    if (message instanceof TextMessage textMessage) {
                         processMessage(textMessage.getText());
                     }
                 }
@@ -105,6 +106,7 @@ public class IngestionMessageListener implements Runnable {
                     try {
                         connection.close();
                     } catch (JMSException e) {
+                        logger.debug("Exception while closing JMS connection.", e);
                     }
                 }
             }
@@ -116,7 +118,6 @@ public class IngestionMessageListener implements Runnable {
         if (value == null) {
             return "";
         }
-        // Minimal escaping for SQL92 string literal used by selectors.
         return value.replace("'", "''");
     }
 
@@ -142,8 +143,10 @@ public class IngestionMessageListener implements Runnable {
             indexingService.indexBook(bookId);
         } catch (NumberFormatException e) {
             logger.error("Received an invalid message that was not a book ID: '{}'", messageText);
-        } catch (Exception e) {
-            logger.error("An error occurred while trying to index book from message '{}'", messageText, e);
+        } catch (IOException e) {
+            logger.error("IO error while indexing book from message '{}': {}", messageText, e.getMessage(), e);
+        } catch (RuntimeException e) {
+            logger.error("Unexpected error while indexing book from message '{}'", messageText, e);
         }
     }
 
