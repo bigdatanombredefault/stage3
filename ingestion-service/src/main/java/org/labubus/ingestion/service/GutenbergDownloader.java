@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -52,7 +53,12 @@ public class GutenbergDownloader implements BookDownloader {
 	}
 
 	private String downloadFromUrl(String urlString) throws IOException {
-		URL url = new URL(urlString);
+		final URL url;
+		try {
+			url = URI.create(urlString).toURL();
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Invalid URL: " + urlString, e);
+		}
 		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 		connection.setRequestMethod("GET");
 		connection.setConnectTimeout(timeout);
