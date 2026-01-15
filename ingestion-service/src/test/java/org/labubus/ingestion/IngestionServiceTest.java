@@ -1,17 +1,17 @@
 package org.labubus.ingestion;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.labubus.ingestion.distributed.DatalakeReplicationClient;
@@ -72,7 +72,7 @@ class IngestionServiceTest {
 	@Test
 	void datalakeReplicationClient_replicateOnce_throwsWhenNoTargets() {
 		DatalakeReplicationClient client = new DatalakeReplicationClient(Duration.ofSeconds(1));
-		assertThrows(IOException.class, () -> client.replicateOnce(
+		IOException thrown = assertThrows(IOException.class, () -> client.replicateOnce(
 			1,
 			"",
 			"content",
@@ -81,17 +81,20 @@ class IngestionServiceTest {
 			8080,
 			"/api/datalake/store"
 		));
+		assertNotNull(thrown.getMessage());
 	}
 
 	private static final class Always201Handler implements HttpHandler {
 		@Override
 		public void handle(HttpExchange exchange) throws IOException {
-			try {
-				assertEquals("POST", exchange.getRequestMethod());
-				exchange.getRequestBody().readAllBytes();
-				byte[] response = "ok".getBytes();
+			assertEquals("POST", exchange.getRequestMethod());
+			try (var requestBody = exchange.getRequestBody(); var responseBody = exchange.getResponseBody()) {
+				byte[] requestBytes = requestBody.readAllBytes();
+				assertNotNull(requestBytes);
+
+				byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
 				exchange.sendResponseHeaders(201, response.length);
-				exchange.getResponseBody().write(response);
+				responseBody.write(response);
 			} finally {
 				exchange.close();
 			}
