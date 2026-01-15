@@ -1,70 +1,90 @@
 services:
+  activemq:
+    image: rmohr/activemq:latest
+    profiles: ["master"]
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    networks:
+      - cluster_net
+    restart: unless-stopped
+
   nginx:
     image: nginx:latest
+    container_name: search_load_balancer
+    profiles: ["master"]
     ports:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     networks:
-      - app_net
-    depends_on:
-      - search-service
+      - cluster_net
     restart: unless-stopped
 
-  activemq:
-    image: rmohr/activemq:latest
-    ports:
-      - "8161:8161"
-      - "61616:61616"
-    networks:
-      - app_net
-    restart: unless-stopped
+  # NOTE: Indexer and Search both run Hazelcast with a fixed port (5701, no auto-increment).
+  # Do not run both on the same physical host.
+  # To avoid accidental port collisions, the shared "worker" profile is only used for crawler nodes.
 
-  ingestion-service:
+  crawler:
     build:
       context: .
       dockerfile: ingestion-service/Dockerfile
-    networks:
-      - app_net
+    profiles: ["crawler", "worker"]
     ports:
-      - "7001:7001"
-    volumes:
-      - datalake_data:/datalake
+      - "8080:8080"
     environment:
-      - activemq.broker.url=tcp://activemq:61616
-      - datalake.path=/datalake
-    depends_on:
-      - activemq
+      - server.port=8080
+      - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
+      - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
+      - DATA_VOLUME_PATH=/datalake
+      - datalake.replication.enabled=${DATALAKE_REPLICATION_ENABLED:-true}
+      - datalake.replication.port=8080
+      - datalake.replication.endpoint=/api/datalake/store
+    volumes:
+      - ${HOST_DATA_VOLUME_PATH:-./datalake}:/datalake
+    networks:
+      - cluster_net
     restart: unless-stopped
 
-  indexing-service:
+  indexer:
     build:
       context: .
       dockerfile: indexing-service/Dockerfile
-    networks:
-      - app_net
-    volumes:
-      - datalake_data:/datalake
+    profiles: ["indexer"]
+    ports:
+      - "8081:8081"
+      - "5701:5701"
     environment:
-      - activemq.broker.url=tcp://activemq:61616
-      - datalake.path=/datalake
-    depends_on:
-      - activemq
+      - server.port=8081
+      - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
+      - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
+      - DATA_VOLUME_PATH=/datalake
+    volumes:
+      - ${HOST_DATA_VOLUME_PATH:-./datalake}:/datalake
+    networks:
+      - cluster_net
     restart: unless-stopped
 
-  search-service:
+  search:
     build:
       context: .
       dockerfile: search-service/Dockerfile
+    profiles: ["search"]
+    ports:
+      - "8082:8082"
+      - "5701:5701"
+    environment:
+      - server.port=8082
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
     networks:
-      - app_net
-    depends_on:
-      - indexing-service
+      - cluster_net
     restart: unless-stopped
 
 networks:
-  app_net:
+  cluster_net:
     driver: bridge
-
-volumes:
-  datalake_data:
