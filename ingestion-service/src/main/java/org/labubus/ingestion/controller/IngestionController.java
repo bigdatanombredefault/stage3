@@ -10,6 +10,7 @@ import javax.jms.JMSException;
 import org.labubus.ingestion.model.IngestionResponse;
 import org.labubus.ingestion.model.IngestionStatusResponse;
 import org.labubus.ingestion.service.BookIngestionService;
+import org.labubus.ingestion.service.BookNotFoundException;
 import org.labubus.ingestion.storage.DatalakeStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,9 +82,16 @@ public class IngestionController {
         } catch (NumberFormatException e) {
             ctx.status(400).json(IngestionResponse.failure(-1, "Invalid book_id format. Must be an integer."));
             logger.warn("Invalid book_id format in request: {}", bookIdParam);
+        } catch (BookNotFoundException e) {
+            // Expected for many Gutenberg IDs; don't spam ERROR logs with stack traces.
+            logger.info("Book {} not found on source: {}", bookId, e.getMessage());
+            ctx.status(404).json(IngestionResponse.failure(bookId, e.getMessage()));
         } catch (IOException | JMSException e) {
             logger.error("Failed to ingest book {}: {}", bookId, e.getMessage(), e);
             ctx.status(500).json(IngestionResponse.failure(bookId, e.getMessage()));
+        } catch (RuntimeException e) {
+            logger.error("Unexpected failure ingesting book {}: {}", bookId, e.getMessage(), e);
+            ctx.status(500).json(IngestionResponse.failure(bookId, "Unexpected ingestion failure: " + e.getMessage()));
         }
     }
 

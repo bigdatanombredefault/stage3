@@ -103,6 +103,9 @@ public class BookIngestionService {
             update(bookId, "downloading", null, null);
             String path = downloadAndSave(bookId);
             update(bookId, "available", path, null);
+        } catch (BookNotFoundException e) {
+            logger.info("Book {} not found on source: {}", bookId, e.getMessage());
+            update(bookId, "failed", null, e.getMessage());
         } catch (IOException | JMSException | RuntimeException e) {
             logger.error("Async ingestion failed for book {}: {}", bookId, e.getMessage(), e);
             update(bookId, "failed", null, e.getMessage());
