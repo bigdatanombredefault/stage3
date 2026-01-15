@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 
 	private final String datalakePath;
 	private final Path downloadedBooksFile;
+	private final ReentrantLock trackingLock = new ReentrantLock();
 
 	public TimestampDatalakeStorage(String datalakePath, String trackingFilename) {
 		if (datalakePath == null || datalakePath.isBlank()) {
@@ -127,9 +129,14 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 	}
 
 	private void trackDownloadedBook(int bookId, String path) throws IOException {
-		Set<BookEntry> entries = getDownloadedBookEntries();
-		entries.add(new BookEntry(bookId, path));
-		Files.writeString(downloadedBooksFile, formatEntries(entries));
+		trackingLock.lock();
+		try {
+			Set<BookEntry> entries = getDownloadedBookEntries();
+			entries.add(new BookEntry(bookId, path));
+			Files.writeString(downloadedBooksFile, formatEntries(entries));
+		} finally {
+			trackingLock.unlock();
+		}
 	}
 
 	private String formatEntries(Set<BookEntry> entries) {
@@ -144,6 +151,8 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 
 	@Override
 	public Set<Integer> getDownloadedBooks() throws IOException {
+		trackingLock.lock();
+		try {
 		Set<Integer> books = new HashSet<>();
 
 		if (!Files.exists(downloadedBooksFile)) {
@@ -163,9 +172,13 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 		}
 
 		return books;
+		} finally {
+			trackingLock.unlock();
+		}
 	}
 
 	private Set<BookEntry> getDownloadedBookEntries() throws IOException {
+		// Only called from methods that already hold trackingLock.
 		Set<BookEntry> entries = new HashSet<>();
 		if (!Files.exists(downloadedBooksFile)) {
 			return entries;

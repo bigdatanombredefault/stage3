@@ -6,7 +6,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -43,6 +48,39 @@ class IngestionServiceTest {
 		assertTrue(storage.isBookDownloaded(bookId));
 		assertEquals(1, storage.getDownloadedBooksCount());
 		assertEquals(List.of(bookId), storage.getDownloadedBooksList());
+	}
+
+	@Test
+	void bucketDatalakeStorage_saveBook_isThreadSafeForTrackingFile(@TempDir Path tempDir) throws Exception {
+		BucketDatalakeStorage storage = new BucketDatalakeStorage(tempDir.toString(), 1000, "downloaded.txt");
+
+		int tasks = 50;
+		ExecutorService pool = Executors.newFixedThreadPool(10);
+		try {
+			List<Future<?>> futures = new ArrayList<>();
+			for (int i = 1; i <= tasks; i++) {
+				final int bookId = i;
+				futures.add(pool.submit(() -> {
+					try {
+						storage.saveBook(bookId, "Title: T\n", "Body");
+					} catch (IOException e) {
+						throw new RuntimeException(e);
+					}
+				}));
+			}
+
+			for (Future<?> f : futures) {
+				try {
+					f.get();
+				} catch (ExecutionException e) {
+					throw e;
+				}
+			}
+
+			assertEquals(tasks, storage.getDownloadedBooksCount());
+		} finally {
+			pool.shutdownNow();
+		}
 	}
 
 	@Test

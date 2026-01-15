@@ -1,9 +1,6 @@
 package org.labubus.ingestion.storage;
 
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -12,6 +9,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +20,7 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 	private final String datalakePath;
 	private final int bucketSize;
 	private final Path downloadedBooksFile;
+	private final ReentrantLock trackingLock = new ReentrantLock();
 
 	public BucketDatalakeStorage(String datalakePath, int bucketSize, String trackingFilename) {
 		if (datalakePath == null || datalakePath.isBlank()) {
@@ -108,42 +107,23 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 	}
 
 	private void trackDownloadedBook(int bookId) throws IOException {
-		try (RandomAccessFile file = new RandomAccessFile(downloadedBooksFile.toFile(), "rw");
-			 FileChannel channel = file.getChannel();
-			 FileLock lock = channel.lock()) {
-
-			ensureValidLock(lock);
-			Set<Integer> current = readTrackedBookIds(file);
+		trackingLock.lock();
+		try {
+			Set<Integer> current = getDownloadedBooks();
 			if (current.add(bookId)) {
-				writeTrackedBookIds(file, current);
+				writeTrackedBookIds(current);
 			}
+		} finally {
+			trackingLock.unlock();
 		}
 	}
 
-	private void ensureValidLock(FileLock lock) throws IOException {
-		if (lock.isValid()) {
-			return;
-		}
-		throw new IOException("Could not acquire a valid lock for tracking file: " + downloadedBooksFile);
-	}
-
-	private Set<Integer> readTrackedBookIds(RandomAccessFile file) throws IOException {
-		Set<Integer> ids = new HashSet<>();
-		String line;
-		while ((line = file.readLine()) != null) {
-			Integer parsed = parseIdOrNull(line);
-			if (parsed != null) {
-				ids.add(parsed);
-			}
-		}
-		return ids;
-	}
-
-	private void writeTrackedBookIds(RandomAccessFile file, Set<Integer> ids) throws IOException {
-		file.setLength(0);
+	private void writeTrackedBookIds(Set<Integer> ids) throws IOException {
+		StringBuilder content = new StringBuilder();
 		for (int id : sorted(ids)) {
-			file.writeBytes(id + "\n");
+			content.append(id).append("\n");
 		}
+		Files.writeString(downloadedBooksFile, content.toString());
 	}
 
 	private List<Integer> sorted(Set<Integer> ids) {
@@ -167,25 +147,27 @@ public class BucketDatalakeStorage implements DatalakeStorage {
 
 	@Override
 	public Set<Integer> getDownloadedBooks() throws IOException {
-		Set<Integer> books = new HashSet<>();
+		trackingLock.lock();
+		try {
+			Set<Integer> books = new HashSet<>();
 
-		if (!Files.exists(downloadedBooksFile)) {
-			return books;
-		}
+			if (!Files.exists(downloadedBooksFile)) {
+				return books;
+			}
 
-		List<String> lines = Files.readAllLines(downloadedBooksFile);
-		for (String line : lines) {
-			line = line.trim();
-			if (!line.isEmpty()) {
-				try {
-					books.add(Integer.valueOf(line));
-				} catch (NumberFormatException e) {
-					logger.warn("Invalid book ID in tracking file: {}", line);
+			List<String> lines = Files.readAllLines(downloadedBooksFile);
+			for (String line : lines) {
+				String trimmed = line == null ? "" : line.trim();
+				Integer parsed = parseIdOrNull(trimmed);
+				if (parsed != null) {
+					books.add(parsed);
 				}
 			}
-		}
 
-		return books;
+			return books;
+		} finally {
+			trackingLock.unlock();
+		}
 	}
 
 	@Override
