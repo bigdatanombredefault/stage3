@@ -1,5 +1,6 @@
 package org.labubus.indexing.web;
 
+import org.labubus.indexing.controller.IndexingController;
 import org.labubus.indexing.service.IndexingService;
 
 import io.javalin.Javalin;
@@ -22,6 +23,8 @@ public final class IndexingHttpServer {
     }
 
     private static void registerRoutes(Javalin app, IndexingService indexingService) {
+        new IndexingController(indexingService).registerRoutes(app);
+
         app.get("/stats", ctx -> ctx.json(indexingService.getStats()));
     }
 }
