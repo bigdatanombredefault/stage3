@@ -103,13 +103,7 @@ public class BookIngestionService {
             update(bookId, "downloading", null, null);
             String path = downloadAndSave(bookId);
             update(bookId, "available", path, null);
-        } catch (IOException e) {
-            logger.error("Async ingestion failed for book {}: {}", bookId, e.getMessage(), e);
-            update(bookId, "failed", null, e.getMessage());
-        } catch (JMSException e) {
-            logger.error("Async ingestion failed for book {}: {}", bookId, e.getMessage(), e);
-            update(bookId, "failed", null, e.getMessage());
-        } catch (RuntimeException e) {
+        } catch (IOException | JMSException | RuntimeException e) {
             logger.error("Async ingestion failed for book {}: {}", bookId, e.getMessage(), e);
             update(bookId, "failed", null, e.getMessage());
         }
