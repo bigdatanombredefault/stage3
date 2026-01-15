@@ -129,6 +129,13 @@ public record IngestionConfig(
         if (brokerUrl != null) {
             return;
         }
+
+        String brokerEnv = trimToNull(properties.getProperty("BROKER_URL"));
+        if (brokerEnv != null) {
+            properties.setProperty("activemq.broker.url", brokerEnv);
+            return;
+        }
+
         String masterIp = requireString(properties, "MASTER_NODE_IP");
         properties.setProperty("activemq.broker.url", "tcp://" + masterIp + ":61616");
     }
