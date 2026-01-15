@@ -18,14 +18,33 @@ import org.slf4j.LoggerFactory;
 public class MessageProducer {
     private static final Logger logger = LoggerFactory.getLogger(MessageProducer.class);
 
+    private static final String BROKER_URL_ENV_VAR = "BROKER_URL";
+
     private final String brokerUrl;
     private final String queueName;
     private final ConnectionFactory connectionFactory;
 
     public MessageProducer(String brokerUrl, String queueName) {
-        this.brokerUrl = brokerUrl;
+        this.brokerUrl = resolveBrokerUrl(brokerUrl);
         this.queueName = queueName;
-        this.connectionFactory = new ActiveMQConnectionFactory(brokerUrl);
+        this.connectionFactory = new ActiveMQConnectionFactory(this.brokerUrl);
+
+        logger.info("ActiveMQ producer configured. queue='{}' brokerUrl='{}'", this.queueName, this.brokerUrl);
+    }
+
+    private static String resolveBrokerUrl(String configuredBrokerUrl) {
+        String envBrokerUrl = System.getenv(BROKER_URL_ENV_VAR);
+        if (envBrokerUrl != null && !envBrokerUrl.isBlank()) {
+            return envBrokerUrl.trim();
+        }
+
+        if (configuredBrokerUrl != null && !configuredBrokerUrl.isBlank()) {
+            return configuredBrokerUrl.trim();
+        }
+
+        throw new IllegalStateException(
+            "Missing ActiveMQ broker URL. Set environment variable '" + BROKER_URL_ENV_VAR + "' or configure 'activemq.broker.url'."
+        );
     }
 
     /**

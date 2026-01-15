@@ -22,6 +22,8 @@ import org.slf4j.LoggerFactory;
 public class IngestionMessageListener implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(IngestionMessageListener.class);
 
+    private static final String BROKER_URL_ENV_VAR = "BROKER_URL";
+
     private final String brokerUrl;
     private final String queueName;
     private final IndexingService indexingService;
@@ -61,7 +63,10 @@ public class IngestionMessageListener implements Runnable {
 
     @Override
     public void run() {
-        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(brokerUrl);
+        String effectiveBrokerUrl = resolveBrokerUrl(brokerUrl);
+        ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(effectiveBrokerUrl);
+
+        logger.info("ActiveMQ listener configured. queue='{}' brokerUrl='{}'", queueName, effectiveBrokerUrl);
 
         while (running) {
             try {
@@ -96,6 +101,21 @@ public class IngestionMessageListener implements Runnable {
             }
         }
         logger.info("ActiveMQ Listener has shut down.");
+    }
+
+    private static String resolveBrokerUrl(String configuredBrokerUrl) {
+        String envBrokerUrl = System.getenv(BROKER_URL_ENV_VAR);
+        if (envBrokerUrl != null && !envBrokerUrl.isBlank()) {
+            return envBrokerUrl.trim();
+        }
+
+        if (configuredBrokerUrl != null && !configuredBrokerUrl.isBlank()) {
+            return configuredBrokerUrl.trim();
+        }
+
+        throw new IllegalStateException(
+            "Missing ActiveMQ broker URL. Set environment variable '" + BROKER_URL_ENV_VAR + "' or configure 'activemq.broker.url'."
+        );
     }
 
     private void processMessage(String messageText) {
