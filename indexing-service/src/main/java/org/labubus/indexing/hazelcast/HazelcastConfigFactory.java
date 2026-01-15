@@ -61,24 +61,34 @@ public final class HazelcastConfigFactory {
         var tcpIp = join.getTcpIpConfig();
         tcpIp.setEnabled(true);
         tcpIp.getMembers().clear();
-        s.members().forEach(member -> tcpIp.addMember(normalizeMemberAddress(member, s.port())));
+        java.util.LinkedHashSet<String> expanded = new java.util.LinkedHashSet<>();
+        for (String member : s.members()) {
+            expanded.addAll(expandMemberAddresses(member, s.memberPorts(), s.port()));
+        }
+        expanded.stream().filter(addr -> !addr.isBlank()).forEach(tcpIp::addMember);
     }
 
-    private static String normalizeMemberAddress(String member, int defaultPort) {
+    private static java.util.List<String> expandMemberAddresses(String member, java.util.List<Integer> memberPorts, int defaultPort) {
         if (member == null) {
-            return "";
+            return java.util.List.of();
         }
         String trimmed = member.trim();
         if (trimmed.isEmpty()) {
-            return "";
+            return java.util.List.of();
         }
 
-        // Accept either "ip" (uses defaultPort) or "ip:port".
-        // This keeps the old behavior but enables multiple Hazelcast members per host.
+        // If the user already specified ip:port, trust it.
         if (trimmed.contains(":")) {
-            return trimmed;
+            return java.util.List.of(trimmed);
         }
-        return trimmed + ":" + defaultPort;
+
+        // If only IPs are provided, expand to all known member ports.
+        if (memberPorts != null && !memberPorts.isEmpty()) {
+            return memberPorts.stream().map(p -> trimmed + ":" + p).toList();
+        }
+
+        // Fallback to the service's own default port.
+        return java.util.List.of(trimmed + ":" + defaultPort);
     }
 
     private static void configureDataStructures(Config config, IndexingConfig.Hazelcast s) {

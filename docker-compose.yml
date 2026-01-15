@@ -56,6 +56,7 @@ services:
       - "5701:5701"
     environment:
       - server.port=8081
+      - hazelcast.cluster.name=${HAZELCAST_CLUSTER_NAME:-search-cluster}
       - hazelcast.port=5701
       - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
       - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
@@ -78,6 +79,7 @@ services:
       - "5702:5702"
     environment:
       - server.port=8082
+      - hazelcast.cluster.name=${HAZELCAST_CLUSTER_NAME:-search-cluster}
       - hazelcast.port=5702
       - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
       - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}

@@ -22,6 +22,7 @@ public record SearchConfig(
     public record Hazelcast(
         String clusterName,
         int port,
+        List<Integer> memberPorts,
         int backupCount,
         int asyncBackupCount,
         String currentNodeIp,
@@ -54,6 +55,7 @@ public record SearchConfig(
         return new Hazelcast(
             requireString(p, "hazelcast.cluster.name"),
             requireInt(p, "hazelcast.port"),
+            splitCsvInts(p.getProperty("hazelcast.member.ports"), List.of(5701, 5702)),
             requireInt(p, "hazelcast.backup.count"),
             requireInt(p, "hazelcast.async.backup.count"),
             requireString(p, "CURRENT_NODE_IP"),
@@ -84,6 +86,33 @@ public record SearchConfig(
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .toList();
+    }
+
+    private static List<Integer> splitCsvInts(String csv, List<Integer> defaultValue) {
+        String trimmed = trimToNull(csv);
+        if (trimmed == null) {
+            return defaultValue;
+        }
+
+        List<Integer> parsed = Arrays.stream(trimmed.split(","))
+            .map(String::trim)
+            .filter(s -> !s.isEmpty())
+            .map(SearchConfig::parsePort)
+            .toList();
+
+        return parsed.isEmpty() ? defaultValue : parsed;
+    }
+
+    private static int parsePort(String value) {
+        try {
+            int port = Integer.parseInt(value);
+            if (port <= 0 || port > 65535) {
+                throw new IllegalArgumentException("port out of range: " + value);
+            }
+            return port;
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("Invalid integer port in hazelcast.member.ports: '" + value + "'", e);
+        }
     }
 
     private static String requireString(Properties properties, String key) {
