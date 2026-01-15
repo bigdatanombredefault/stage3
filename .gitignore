@@ -44,3 +44,5 @@ data/
 datalake/
 datamart/
 */dependency-reduced-pom.xml
+
+.env
