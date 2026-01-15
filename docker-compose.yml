@@ -11,7 +11,7 @@ services:
 
   nginx:
     image: nginx:latest
-    container_name: search_load_balancer
+    container_name: stage3-nginx
     profiles: ["master"]
     ports:
       - "80:80"
@@ -21,15 +21,11 @@ services:
       - cluster_net
     restart: unless-stopped
 
-  # NOTE: The indexer runs a Hazelcast *member* on port 5701.
-  # The search service connects as a Hazelcast *client* and does not bind 5701 on the host,
-  # so running crawler+indexer+search on the same physical host is supported.
-
   crawler:
     build:
       context: .
       dockerfile: ingestion-service/Dockerfile
-    profiles: ["crawler", "worker", "node"]
+    profiles: ["node"]
     ports:
       - "8080:8080"
     environment:
@@ -54,7 +50,7 @@ services:
     build:
       context: .
       dockerfile: indexing-service/Dockerfile
-    profiles: ["indexer", "node"]
+    profiles: ["node"]
     ports:
       - "8081:8081"
       - "5701:5701"
@@ -75,7 +71,7 @@ services:
     build:
       context: .
       dockerfile: search-service/Dockerfile
-    profiles: ["search", "node"]
+    profiles: ["node"]
     ports:
       - "8082:8082"
     environment:
