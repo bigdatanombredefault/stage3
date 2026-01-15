@@ -193,9 +193,16 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 	}
 
 	private Integer parseIdOrNull(String value) {
+		if (value == null) {
+			return null;
+		}
+		String trimmed = value.trim();
+		if (trimmed.isEmpty()) {
+			return null;
+		}
 		try {
-			return Integer.valueOf(value.trim());
-		} catch (Exception e) {
+			return Integer.valueOf(trimmed);
+		} catch (NumberFormatException e) {
 			return null;
 		}
 	}
