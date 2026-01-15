@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.jms.JMSException;
+
 import org.labubus.ingestion.model.IngestionResponse;
 import org.labubus.ingestion.model.IngestionStatusResponse;
 import org.labubus.ingestion.service.BookIngestionService;
@@ -55,10 +57,20 @@ public class IngestionController {
             bookId = Integer.parseInt(bookIdParam);
             logger.info("Received ingest request for book {}", bookId);
 
+            String asyncParam = ctx.queryParam("async");
+            boolean async = asyncParam != null ? Boolean.parseBoolean(asyncParam) : ingestionService.isAsyncEnabledByDefault();
+
             if (ingestionService.isBookDownloaded(bookId)) {
                 String path = ingestionService.getBookPath(bookId);
                 ctx.status(200).json(IngestionResponse.alreadyExists(bookId, path));
                 logger.info("Book {} already exists at {}", bookId, path);
+                return;
+            }
+
+            if (async) {
+                var status = ingestionService.startAsyncIngestion(bookId);
+                ctx.status(202).json(IngestionResponse.accepted(status.bookId(), status.status(), status.path(), status.message()));
+                logger.info("Accepted async ingestion for book {} (status={})", bookId, status.status());
                 return;
             }
 
@@ -69,7 +81,7 @@ public class IngestionController {
         } catch (NumberFormatException e) {
             ctx.status(400).json(IngestionResponse.failure(-1, "Invalid book_id format. Must be an integer."));
             logger.warn("Invalid book_id format in request: {}", bookIdParam);
-        } catch (Exception e) {
+        } catch (IOException | JMSException e) {
             logger.error("Failed to ingest book {}: {}", bookId, e.getMessage(), e);
             ctx.status(500).json(IngestionResponse.failure(bookId, e.getMessage()));
         }
@@ -80,12 +92,14 @@ public class IngestionController {
         try {
             int bookId = Integer.parseInt(bookIdParam);
             logger.debug("Checking status for book {}", bookId);
-            if (ingestionService.isBookDownloaded(bookId)) {
-                String path = ingestionService.getBookPath(bookId);
-                ctx.status(200).json(IngestionStatusResponse.available(bookId, path));
-            } else {
+
+            var status = ingestionService.getJobStatus(bookId);
+            if ("not_found".equals(status.status())) {
                 ctx.status(404).json(IngestionStatusResponse.notFound(bookId));
+                return;
             }
+
+            ctx.status(200).json(IngestionStatusResponse.status(status.bookId(), status.status(), status.path(), status.message()));
         } catch (NumberFormatException e) {
             ctx.status(400).json(Map.of("error", "Invalid book_id format. Must be an integer."));
             logger.warn("Invalid book_id format in status request: {}", bookIdParam);

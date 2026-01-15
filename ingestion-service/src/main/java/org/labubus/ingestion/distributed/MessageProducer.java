@@ -19,17 +19,29 @@ public class MessageProducer {
     private static final Logger logger = LoggerFactory.getLogger(MessageProducer.class);
 
     private static final String BROKER_URL_ENV_VAR = "BROKER_URL";
+    private static final String CURRENT_NODE_IP_ENV_VAR = "CURRENT_NODE_IP";
+
+    /** JMS message property used to route indexing jobs to the node that owns the local datalake partition. */
+    public static final String MSG_PROP_SOURCE_NODE_IP = "sourceNodeIp";
 
     private final String brokerUrl;
     private final String queueName;
+    private final String sourceNodeIp;
     private final ConnectionFactory connectionFactory;
 
-    public MessageProducer(String brokerUrl, String queueName) {
+    public MessageProducer(String brokerUrl, String queueName, String currentNodeIp) {
         this.brokerUrl = resolveBrokerUrl(brokerUrl);
         this.queueName = queueName;
+        this.sourceNodeIp = resolveCurrentNodeIp(currentNodeIp);
         this.connectionFactory = new ActiveMQConnectionFactory(this.brokerUrl);
 
-        logger.info("ActiveMQ producer configured. queue='{}' brokerUrl='{}'", this.queueName, this.brokerUrl);
+        logger.info(
+            "ActiveMQ producer configured. queue='{}' brokerUrl='{}' {}='{}'",
+            this.queueName,
+            this.brokerUrl,
+            MSG_PROP_SOURCE_NODE_IP,
+            this.sourceNodeIp
+        );
     }
 
     private static String resolveBrokerUrl(String configuredBrokerUrl) {
@@ -45,6 +57,20 @@ public class MessageProducer {
         throw new IllegalStateException(
             "Missing ActiveMQ broker URL. Set environment variable '" + BROKER_URL_ENV_VAR + "' or configure 'activemq.broker.url'."
         );
+    }
+
+    private static String resolveCurrentNodeIp(String configuredCurrentNodeIp) {
+        String envIp = System.getenv(CURRENT_NODE_IP_ENV_VAR);
+        if (envIp != null && !envIp.isBlank()) {
+            return envIp.trim();
+        }
+
+        if (configuredCurrentNodeIp != null && !configuredCurrentNodeIp.isBlank()) {
+            return configuredCurrentNodeIp.trim();
+        }
+
+        // Keep a sensible default to avoid hard failures in local/dev environments.
+        return "localhost";
     }
 
     /**
@@ -65,6 +91,8 @@ public class MessageProducer {
             producer.setDeliveryMode(DeliveryMode.PERSISTENT); // Ensure message survives a broker restart
 
             TextMessage message = session.createTextMessage(String.valueOf(bookId));
+            message.setJMSCorrelationID(String.valueOf(bookId));
+            message.setStringProperty(MSG_PROP_SOURCE_NODE_IP, sourceNodeIp);
 
             producer.send(message);
             logger.debug("Sent message for bookId: {}", bookId);

@@ -17,4 +17,8 @@ public record IngestionResponse (
 	public static IngestionResponse failure(int bookId, String message) {
 		return new IngestionResponse(bookId, "failed", null, message);
 	}
+
+	public static IngestionResponse accepted(int bookId, String status, String path, String message) {
+		return new IngestionResponse(bookId, status, path, message);
+	}
 }

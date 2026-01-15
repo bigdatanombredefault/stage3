@@ -20,10 +20,12 @@ import java.util.Properties;
  */
 public record IngestionConfig(
     int serverPort,
+    String currentNodeIp,
     ActiveMq activeMq,
     Datalake datalake,
     Gutenberg gutenberg,
-    Replication replication
+    Replication replication,
+    Async async
 ) {
     /** ActiveMQ connectivity settings used to publish ingestion messages. */
     public record ActiveMq(String brokerUrl, String queueName) {}
@@ -46,6 +48,9 @@ public record IngestionConfig(
         Duration timeout
     ) {}
 
+    /** Async ingestion settings (to avoid blocking HTTP clients during download/replication). */
+    public record Async(boolean enabled, int workers) {}
+
     /**
      * Loads configuration from classpath properties plus environment variables.
      *
@@ -62,11 +67,22 @@ public record IngestionConfig(
     private static IngestionConfig from(Properties p) {
         return new IngestionConfig(
             requireInt(p, "server.port"),
+            requireString(p, "CURRENT_NODE_IP"),
             readActiveMq(p),
             readDatalake(p),
             readGutenberg(p),
-            readReplication(p)
+            readReplication(p),
+            readAsync(p)
         );
+    }
+
+    private static Async readAsync(Properties p) {
+        boolean enabled = Boolean.parseBoolean(requireString(p, "ingestion.async.enabled"));
+        int workers = requireInt(p, "ingestion.async.workers");
+        if (workers <= 0) {
+            throw new IllegalStateException("ingestion.async.workers must be > 0");
+        }
+        return new Async(enabled, workers);
     }
 
     private static ActiveMq readActiveMq(Properties p) {

@@ -42,33 +42,42 @@ public final class IngestionBootstrap {
 
     private static void start() {
         IngestionConfig cfg = IngestionConfig.load();
-        Javalin app = startHttp(cfg);
-        addShutdownHook(app);
+        Boot boot = startHttp(cfg);
+        addShutdownHook(boot);
         logger.info("Ingestion Service started successfully.");
     }
 
-    private static Javalin startHttp(IngestionConfig cfg) {
+    private static Boot startHttp(IngestionConfig cfg) {
         DatalakeStorage storage = DatalakeStorageFactory.create(cfg.datalake());
-        IngestionController ingestionController = buildIngestionController(cfg, storage);
-        DatalakeController datalakeController = new DatalakeController(storage);
-        return IngestionHttpServer.start(cfg.serverPort(), ingestionController, datalakeController);
-    }
-
-    private static IngestionController buildIngestionController(IngestionConfig cfg, DatalakeStorage storage) {
         BookDownloader downloader = new GutenbergDownloader(cfg.gutenberg().baseUrl(), cfg.gutenberg().timeoutMs());
-        MessageProducer producer = new MessageProducer(cfg.activeMq().brokerUrl(), cfg.activeMq().queueName());
+        MessageProducer producer = new MessageProducer(cfg.activeMq().brokerUrl(), cfg.activeMq().queueName(), cfg.currentNodeIp());
         DatalakeReplicationClient replicator = new DatalakeReplicationClient(cfg.replication().timeout());
-        BookIngestionService ingestionService = new BookIngestionService(storage, downloader, producer, replicator, cfg.replication());
-        return new IngestionController(ingestionService, storage);
+
+        BookIngestionService ingestionService = new BookIngestionService(
+            storage,
+            downloader,
+            producer,
+            replicator,
+            cfg.replication(),
+            cfg.async()
+        );
+
+        IngestionController ingestionController = new IngestionController(ingestionService, storage);
+        DatalakeController datalakeController = new DatalakeController(storage);
+        Javalin app = IngestionHttpServer.start(cfg.serverPort(), ingestionController, datalakeController);
+        return new Boot(app, ingestionService);
     }
 
-    private static void addShutdownHook(Javalin app) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(app)));
+    private static void addShutdownHook(Boot boot) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(boot)));
     }
 
-    private static void shutdown(Javalin app) {
+    private static void shutdown(Boot boot) {
         logger.info("Shutting down Ingestion Service...");
-        app.stop();
+        boot.ingestionService.shutdown();
+        boot.app.stop();
         logger.info("Ingestion Service stopped.");
     }
+
+    private record Boot(Javalin app, BookIngestionService ingestionService) {}
 }

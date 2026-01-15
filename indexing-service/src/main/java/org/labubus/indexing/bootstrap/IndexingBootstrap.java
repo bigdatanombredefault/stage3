@@ -83,6 +83,7 @@ public final class IndexingBootstrap {
         IngestionMessageListener listener = new IngestionMessageListener(
             cfg.activeMq().brokerUrl(),
             cfg.activeMq().queueName(),
+            cfg.hazelcast().currentNodeIp(),
             indexingService
         );
         listener.start();

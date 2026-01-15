@@ -23,17 +23,20 @@ public class IngestionMessageListener implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(IngestionMessageListener.class);
 
     private static final String BROKER_URL_ENV_VAR = "BROKER_URL";
+    private static final String MSG_PROP_SOURCE_NODE_IP = "sourceNodeIp";
 
     private final String brokerUrl;
     private final String queueName;
+    private final String currentNodeIp;
     private final IndexingService indexingService;
 
     private volatile boolean running = true;
     private Connection connection;
 
-    public IngestionMessageListener(String brokerUrl, String queueName, IndexingService indexingService) {
+    public IngestionMessageListener(String brokerUrl, String queueName, String currentNodeIp, IndexingService indexingService) {
         this.brokerUrl = brokerUrl;
         this.queueName = queueName;
+        this.currentNodeIp = currentNodeIp;
         this.indexingService = indexingService;
     }
 
@@ -66,7 +69,13 @@ public class IngestionMessageListener implements Runnable {
         String effectiveBrokerUrl = resolveBrokerUrl(brokerUrl);
         ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(effectiveBrokerUrl);
 
-        logger.info("ActiveMQ listener configured. queue='{}' brokerUrl='{}'", queueName, effectiveBrokerUrl);
+        String selector = MSG_PROP_SOURCE_NODE_IP + " = '" + escapeSelectorValue(currentNodeIp) + "'";
+        logger.info(
+            "ActiveMQ listener configured. queue='{}' brokerUrl='{}' selector=({})",
+            queueName,
+            effectiveBrokerUrl,
+            selector
+        );
 
         while (running) {
             try {
@@ -74,7 +83,7 @@ public class IngestionMessageListener implements Runnable {
                 connection.start();
                 Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
                 Destination destination = session.createQueue(queueName);
-                MessageConsumer consumer = session.createConsumer(destination);
+                MessageConsumer consumer = session.createConsumer(destination, selector);
 
                 logger.info("Listener connected. Waiting for messages from queue '{}'...", queueName);
 
@@ -101,6 +110,14 @@ public class IngestionMessageListener implements Runnable {
             }
         }
         logger.info("ActiveMQ Listener has shut down.");
+    }
+
+    private static String escapeSelectorValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        // Minimal escaping for SQL92 string literal used by selectors.
+        return value.replace("'", "''");
     }
 
     private static String resolveBrokerUrl(String configuredBrokerUrl) {

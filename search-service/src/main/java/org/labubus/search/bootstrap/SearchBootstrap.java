@@ -2,13 +2,13 @@ package org.labubus.search.bootstrap;
 
 import org.labubus.search.config.SearchConfig;
 import org.labubus.search.controller.SearchController;
-import org.labubus.search.hazelcast.HazelcastConfigFactory;
+import org.labubus.search.hazelcast.HazelcastClientConfigFactory;
 import org.labubus.search.service.SearchService;
 import org.labubus.search.web.SearchHttpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.hazelcast.core.Hazelcast;
+import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.core.HazelcastInstance;
 
 import io.javalin.Javalin;
@@ -46,8 +46,8 @@ public final class SearchBootstrap {
     }
 
     private static HazelcastInstance startHazelcast(SearchConfig cfg) {
-        var config = HazelcastConfigFactory.build(cfg.hazelcast());
-        return Hazelcast.newHazelcastInstance(config);
+        var config = HazelcastClientConfigFactory.build(cfg.hazelcast());
+        return HazelcastClient.newHazelcastClient(config);
     }
 
     private static Javalin startHttp(SearchConfig cfg, HazelcastInstance hz) {

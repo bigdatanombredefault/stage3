@@ -21,15 +21,15 @@ services:
       - cluster_net
     restart: unless-stopped
 
-  # NOTE: Indexer and Search both run Hazelcast with a fixed port (5701, no auto-increment).
-  # Do not run both on the same physical host.
-  # To avoid accidental port collisions, the shared "worker" profile is only used for crawler nodes.
+  # NOTE: The indexer runs a Hazelcast *member* on port 5701.
+  # The search service connects as a Hazelcast *client* and does not bind 5701 on the host,
+  # so running crawler+indexer+search on the same physical host is supported.
 
   crawler:
     build:
       context: .
       dockerfile: ingestion-service/Dockerfile
-    profiles: ["crawler", "worker"]
+    profiles: ["crawler", "worker", "node"]
     ports:
       - "8080:8080"
     environment:
@@ -39,6 +39,8 @@ services:
       - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
       - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
       - DATA_VOLUME_PATH=/datalake
+      - ingestion.async.enabled=${INGESTION_ASYNC_ENABLED:-true}
+      - ingestion.async.workers=${INGESTION_ASYNC_WORKERS:-4}
       - datalake.replication.enabled=${DATALAKE_REPLICATION_ENABLED:-true}
       - datalake.replication.port=8080
       - datalake.replication.endpoint=/api/datalake/store
@@ -52,7 +54,7 @@ services:
     build:
       context: .
       dockerfile: indexing-service/Dockerfile
-    profiles: ["indexer"]
+    profiles: ["indexer", "node"]
     ports:
       - "8081:8081"
       - "5701:5701"
@@ -73,10 +75,9 @@ services:
     build:
       context: .
       dockerfile: search-service/Dockerfile
-    profiles: ["search"]
+    profiles: ["search", "node"]
     ports:
       - "8082:8082"
-      - "5701:5701"
     environment:
       - server.port=8082
       - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
