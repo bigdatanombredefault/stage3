@@ -89,7 +89,9 @@ public final class HazelcastConfigFactory {
     }
 
     private static void configureCpSubsystem(Config config, SearchConfig.Hazelcast s) {
-        int cpMembers = Math.max(1, Math.min(3, s.members().size()));
+        // Hazelcast CP Subsystem requires at least 3 CP members.
+        // We keep it at 3 (odd number) so nodes can boot and form CP once enough members join.
+        int cpMembers = 3;
         config.getCPSubsystemConfig().setCPMemberCount(cpMembers);
         config.getCPSubsystemConfig().setGroupSize(cpMembers);
     }

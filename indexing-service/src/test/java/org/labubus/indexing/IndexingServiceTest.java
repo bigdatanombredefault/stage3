@@ -1,5 +1,9 @@
 package org.labubus.indexing;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -7,9 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.labubus.indexing.service.IndexingService;
@@ -35,7 +36,8 @@ class IndexingServiceTest {
 	@Test
 	void indexingService_rebuildIndexFromLocalFiles_populatesHazelcast(@TempDir Path datalakeDir) throws Exception {
 		Files.writeString(datalakeDir.resolve("1_header.txt"), "Title: One\nAuthor: A\nLanguage: en\nRelease Date: 2001");
-		Files.writeString(datalakeDir.resolve("1_body.txt"), "hello world");
+		// Use tokens that are very unlikely to appear in stopword lists.
+		Files.writeString(datalakeDir.resolve("1_body.txt"), "hazelcast labubus");
 
 		List<HazelcastInstance> instances = new ArrayList<>();
 		try {
@@ -75,7 +77,7 @@ class IndexingServiceTest {
 		assertEquals(1, rebuilt);
 		assertFalse(indexingService.isInvertedIndexEmpty());
 		assertTrue(hazelcast.getMap("metadata").containsKey(1));
-		assertTrue(hazelcast.getMultiMap("inverted").containsEntry("hello", "1"));
+		assertTrue(hazelcast.getMultiMap("inverted").containsEntry("hazelcast", "1"));
 		} finally {
 			for (HazelcastInstance instance : instances) {
 				instance.shutdown();
