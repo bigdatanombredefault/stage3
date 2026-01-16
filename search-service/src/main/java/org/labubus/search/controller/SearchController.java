@@ -1,15 +1,16 @@
 package org.labubus.search.controller;
 
-import io.javalin.Javalin;
-import io.javalin.http.Context;
+import java.util.List;
+import java.util.Map;
+
 import org.labubus.search.model.SearchResponse;
 import org.labubus.search.model.SearchResult;
 import org.labubus.search.service.SearchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Map;
+import io.javalin.Javalin;
+import io.javalin.http.Context;
 
 public class SearchController {
     private static final Logger logger = LoggerFactory.getLogger(SearchController.class);
@@ -47,8 +48,8 @@ public class SearchController {
 
     private void handleSearch(Context ctx) {
         try {
-            String query = ctx.queryParam("q");
-            if (query == null || query.trim().isEmpty()) {
+            String query = firstQueryParamOrNull(ctx, "q");
+            if (query == null || query.isBlank()) {
                 ctx.status(400).json(Map.of("error", "Query parameter 'q' is required."));
                 return;
             }
@@ -72,6 +73,15 @@ public class SearchController {
             logger.error("Search failed", e);
             ctx.status(500).json(Map.of("error", "Search failed: " + e.getMessage()));
         }
+    }
+
+    private static String firstQueryParamOrNull(Context ctx, String key) {
+        List<String> values = ctx.queryParamMap().get(key);
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        String v = values.get(0);
+        return v == null ? null : v;
     }
 
     private void handleBrowse(Context ctx) {

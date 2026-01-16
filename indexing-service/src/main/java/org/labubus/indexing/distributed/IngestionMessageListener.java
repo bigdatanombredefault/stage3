@@ -1,6 +1,8 @@
 package org.labubus.indexing.distributed;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
@@ -27,13 +29,16 @@ public class IngestionMessageListener implements Runnable {
     private static final String BROKER_URL_ENV_VAR = "BROKER_URL";
     private static final String MSG_PROP_SOURCE_NODE_IP = "sourceNodeIp";
 
+    private static final String CONSUMERS_ENV_VAR = "INDEXER_CONSUMERS";
+    private static final String MAX_DELIVERIES_ENV_VAR = "INDEXER_MAX_DELIVERIES";
+
     private final String brokerUrl;
     private final String queueName;
     private final String currentNodeIp;
     private final IndexingService indexingService;
 
     private volatile boolean running = true;
-    private Connection connection;
+    private final List<Connection> connections = new ArrayList<>();
 
     public IngestionMessageListener(String brokerUrl, String queueName, String currentNodeIp, IndexingService indexingService) {
         this.brokerUrl = brokerUrl;
@@ -46,10 +51,13 @@ public class IngestionMessageListener implements Runnable {
      * Starts the listener in a new background daemon thread.
      */
     public void start() {
-        Thread listenerThread = new Thread(this);
-        listenerThread.setDaemon(true); // Daemon threads don't prevent the application from exiting.
-        listenerThread.setName("ActiveMQ-Listener-Thread");
-        listenerThread.start();
+        int consumers = readPositiveIntEnvOrDefault(CONSUMERS_ENV_VAR, 1);
+        for (int i = 0; i < consumers; i++) {
+            Thread t = new Thread(this);
+            t.setDaemon(true);
+            t.setName("ActiveMQ-Listener-" + (i + 1));
+            t.start();
+        }
     }
 
     /**
@@ -57,9 +65,10 @@ public class IngestionMessageListener implements Runnable {
      */
     public void stop() {
         this.running = false;
-        if (connection != null) {
+
+        for (Connection c : connections) {
             try {
-                connection.close();
+                c.close();
             } catch (JMSException e) {
                 logger.warn("Exception while closing connection during shutdown.", e);
             }
@@ -71,6 +80,8 @@ public class IngestionMessageListener implements Runnable {
         String effectiveBrokerUrl = resolveBrokerUrl(brokerUrl);
         ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(effectiveBrokerUrl);
 
+        int maxDeliveries = readPositiveIntEnvOrDefault(MAX_DELIVERIES_ENV_VAR, 5);
+
         String selector = MSG_PROP_SOURCE_NODE_IP + " = '" + escapeSelectorValue(currentNodeIp) + "'";
         logger.info(
             "ActiveMQ listener configured. queue='{}' brokerUrl='{}' selector=({})",
@@ -81,9 +92,14 @@ public class IngestionMessageListener implements Runnable {
 
         while (running) {
             try {
-                connection = connectionFactory.createConnection();
+                Connection connection = connectionFactory.createConnection();
+                synchronized (connections) {
+                    connections.add(connection);
+                }
                 connection.start();
-                Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+
+                // CLIENT_ACKNOWLEDGE: we acknowledge ONLY after indexing succeeds.
+                Session session = connection.createSession(false, Session.CLIENT_ACKNOWLEDGE);
                 Destination destination = session.createQueue(queueName);
                 MessageConsumer consumer = session.createConsumer(destination, selector);
 
@@ -92,8 +108,30 @@ public class IngestionMessageListener implements Runnable {
                 while (running) {
                     Message message = consumer.receive(5000);
 
-                    if (message instanceof TextMessage textMessage) {
-                        processMessage(textMessage.getText());
+                    if (!(message instanceof TextMessage textMessage)) {
+                        continue;
+                    }
+
+                    boolean ok = processMessage(textMessage.getText());
+
+                    if (ok) {
+                        message.acknowledge();
+                        continue;
+                    }
+
+                    int deliveryCount = readDeliveryCountOrDefault(message, 1);
+                    if (deliveryCount >= maxDeliveries) {
+                        logger.error(
+                            "Dropping message after {} deliveries (max={}): {}",
+                            deliveryCount,
+                            maxDeliveries,
+                            safeMessagePreview(textMessage)
+                        );
+                        message.acknowledge();
+                    } else {
+                        // Make the broker redeliver (backoff happens in the broker redelivery policy).
+                        session.recover();
+                        sleep(250);
                     }
                 }
             } catch (JMSException e) {
@@ -102,13 +140,7 @@ public class IngestionMessageListener implements Runnable {
                     sleep(10000);
                 }
             } finally {
-                if (connection != null) {
-                    try {
-                        connection.close();
-                    } catch (JMSException e) {
-                        logger.debug("Exception while closing JMS connection.", e);
-                    }
-                }
+                // Each worker owns its connection; closing is handled by stop() and broker failures.
             }
         }
         logger.info("ActiveMQ Listener has shut down.");
@@ -136,17 +168,58 @@ public class IngestionMessageListener implements Runnable {
         );
     }
 
-    private void processMessage(String messageText) {
+    private boolean processMessage(String messageText) {
         try {
             int bookId = Integer.parseInt(messageText);
             logger.info("Received job: Index book {}", bookId);
             indexingService.indexBook(bookId);
+            return true;
         } catch (NumberFormatException e) {
             logger.error("Received an invalid message that was not a book ID: '{}'", messageText);
+            return true; // bad message: ack it
         } catch (IOException e) {
-            logger.error("IO error while indexing book from message '{}': {}", messageText, e.getMessage(), e);
+            logger.warn("Indexing failed for message '{}': {}", messageText, e.getMessage());
+            return false;
         } catch (RuntimeException e) {
             logger.error("Unexpected error while indexing book from message '{}'", messageText, e);
+            return false;
+        }
+    }
+
+    private static int readPositiveIntEnvOrDefault(String env, int defaultValue) {
+        String raw = System.getenv(env);
+        if (raw == null || raw.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            int v = Integer.parseInt(raw.trim());
+            return v > 0 ? v : defaultValue;
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    private static int readDeliveryCountOrDefault(Message message, int defaultValue) {
+        try {
+            if (message.propertyExists("JMSXDeliveryCount")) {
+                return message.getIntProperty("JMSXDeliveryCount");
+            }
+        } catch (JMSException ignored) {
+            // best-effort
+        }
+        return defaultValue;
+    }
+
+    private static String safeMessagePreview(TextMessage msg) {
+        try {
+            String text = msg.getText();
+            if (text == null) {
+                return "<null>";
+            }
+            String trimmed = text.trim();
+            return trimmed.length() <= 200 ? trimmed : trimmed.substring(0, 200) + "...";
+        } catch (JMSException e) {
+            return "<unavailable>";
         }
     }
 
