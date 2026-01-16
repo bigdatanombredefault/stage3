@@ -1,9 +1,15 @@
 package org.labubus.indexing.service;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -21,12 +27,45 @@ public class IndexingService {
     private static final Logger logger = LoggerFactory.getLogger(IndexingService.class);
 
     private static final int MIN_TERM_LENGTH = 3;
-    private static final Set<String> STOPWORDS = Set.of(
+    private static final String STOPWORDS_RESOURCE = "stopwords.txt";
+
+    private static final int LOCK_STRIPES = 64;
+    private static final Set<String> DEFAULT_STOPWORDS = Set.of(
         "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "has", "have", "he",
         "her", "hers", "him", "his", "i", "in", "is", "it", "its", "me", "my", "not", "of", "on",
         "or", "our", "she", "so", "that", "the", "their", "them", "they", "this", "to", "was",
         "we", "were", "with", "you", "your"
     );
+    private static final Set<String> STOPWORDS = loadStopwords();
+
+    private static Set<String> loadStopwords() {
+        Set<String> merged = new HashSet<>(DEFAULT_STOPWORDS);
+
+        try (InputStream in = IndexingService.class.getClassLoader().getResourceAsStream(STOPWORDS_RESOURCE)) {
+            if (in == null) {
+                logger.info("No {} found on classpath; using default stopwords ({} words).", STOPWORDS_RESOURCE, merged.size());
+                return Collections.unmodifiableSet(merged);
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                int added = 0;
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String cleaned = line.trim();
+                    if (cleaned.isEmpty() || cleaned.startsWith("#")) {
+                        continue;
+                    }
+                    if (merged.add(cleaned.toLowerCase(Locale.ROOT))) {
+                        added++;
+                    }
+                }
+                logger.info("Loaded {} stopwords from {} (total stopwords: {}).", added, STOPWORDS_RESOURCE, merged.size());
+                return Collections.unmodifiableSet(merged);
+            }
+        } catch (IOException e) {
+            logger.warn("Failed to load {} ({}). Using default stopwords ({} words).", STOPWORDS_RESOURCE, e.getMessage(), merged.size());
+            return Collections.unmodifiableSet(merged);
+        }
+    }
 
     private final HazelcastInstance hazelcast;
     private final DatalakeReader datalakeReader;
@@ -118,27 +157,54 @@ public class IndexingService {
         Set<String> words = extractWords(body);
         MultiMap<String, String> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
         String docId = String.valueOf(bookId);
-        words.forEach(word -> indexWord(invertedIndex, word, docId));
+        indexWordsStriped(invertedIndex, words, docId);
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }
 
-    private void indexWord(MultiMap<String, String> invertedIndex, String word, String docId) {
-        if (word == null || word.isBlank()) {
+    private void indexWordsStriped(MultiMap<String, String> invertedIndex, Set<String> words, String docId) {
+        if (words == null || words.isEmpty()) {
             return;
         }
-        String lockName = lockNameForWord(word);
-        FencedLock lock = hazelcast.getCPSubsystem().getLock(lockName);
-        lock.lock();
-        try {
-            invertedIndex.put(word, docId);
-        } finally {
-            lock.unlock();
+
+        @SuppressWarnings("unchecked")
+        List<String>[] stripes = new List[LOCK_STRIPES];
+        for (String word : words) {
+            if (word == null || word.isBlank()) {
+                continue;
+            }
+            int stripe = stripeFor(word);
+            List<String> bucket = stripes[stripe];
+            if (bucket == null) {
+                bucket = new java.util.ArrayList<>();
+                stripes[stripe] = bucket;
+            }
+            bucket.add(word);
+        }
+
+        for (int i = 0; i < stripes.length; i++) {
+            List<String> bucket = stripes[i];
+            if (bucket == null || bucket.isEmpty()) {
+                continue;
+            }
+
+            FencedLock lock = hazelcast.getCPSubsystem().getLock(lockNameForStripe(i));
+            lock.lock();
+            try {
+                for (String word : bucket) {
+                    invertedIndex.put(word, docId);
+                }
+            } finally {
+                lock.unlock();
+            }
         }
     }
 
-    private String lockNameForWord(String word) {
-        String normalized = word.trim().toLowerCase();
-        return "lock:inverted-index:" + normalized;
+    private static int stripeFor(String word) {
+        return (word.hashCode() & 0x7fffffff) % LOCK_STRIPES;
+    }
+
+    private static String lockNameForStripe(int stripe) {
+        return "lock:inverted-index:stripe:" + stripe;
     }
 
     /**
