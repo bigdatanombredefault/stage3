@@ -34,6 +34,7 @@ public class IndexingService {
 
     private static final int LOCK_STRIPES = 64;
     private static final long CP_TRY_LOCK_TIMEOUT_MS = 200;
+    private static final int STRIPE_PUT_CHUNK_SIZE = 2_000;
     private static final AtomicBoolean WARNED_CP_FALLBACK = new AtomicBoolean(false);
     private static final ReentrantLock[] LOCAL_STRIPE_LOCKS = createLocalStripeLocks();
     private static final Set<String> DEFAULT_STOPWORDS = Set.of(
@@ -193,10 +194,14 @@ public class IndexingService {
                 continue;
             }
 
-            try (StripeLock stripeLock = lockStripe(i)) {
-                stripeLock.assertHeld();
-                for (String word : bucket) {
-                    invertedIndex.put(word, docId);
+            // Chunking reduces how long other nodes might block on the same CP lock.
+            for (int offset = 0; offset < bucket.size(); offset += STRIPE_PUT_CHUNK_SIZE) {
+                int end = Math.min(bucket.size(), offset + STRIPE_PUT_CHUNK_SIZE);
+                try (StripeLock stripeLock = lockStripe(i)) {
+                    stripeLock.assertHeld();
+                    for (int j = offset; j < end; j++) {
+                        invertedIndex.put(bucket.get(j), docId);
+                    }
                 }
             }
         }
@@ -210,7 +215,12 @@ public class IndexingService {
             boolean acquired = cpLock.tryLock(CP_TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!acquired) {
                 // Likely contention; preserve CP semantics.
+                long waitStartNs = System.nanoTime();
                 cpLock.lock();
+                long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - waitStartNs);
+                if (waitedMs >= 5_000) {
+                    logger.warn("Waited {}ms for CP stripe lock {} (high contention / CP election).", waitedMs, stripe);
+                }
             }
             return new StripeLock(cpLock::unlock);
         } catch (RuntimeException e) {
