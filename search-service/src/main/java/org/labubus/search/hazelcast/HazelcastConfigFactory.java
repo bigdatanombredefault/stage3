@@ -89,11 +89,9 @@ public final class HazelcastConfigFactory {
     }
 
     private static void configureCpSubsystem(Config config, SearchConfig.Hazelcast s) {
-        // Hazelcast CP Subsystem requires at least 3 CP members.
-        // We keep it at 3 (odd number) so nodes can boot and form CP once enough members join.
-        int cpMembers = 3;
-        config.getCPSubsystemConfig().setCPMemberCount(cpMembers);
-        config.getCPSubsystemConfig().setGroupSize(cpMembers);
+        // Search is a Hazelcast member (per rubric), but it does not need CP membership.
+        // Keeping search out of CP prevents CP quorum loss when a whole PC is stopped/restarted.
+        config.getCPSubsystemConfig().setCPMemberCount(0);
     }
 
     private static void configureJoin(Config config, SearchConfig.Hazelcast s) {

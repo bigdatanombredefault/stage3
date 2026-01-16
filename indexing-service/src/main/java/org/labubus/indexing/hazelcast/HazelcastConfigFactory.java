@@ -90,10 +90,21 @@ public final class HazelcastConfigFactory {
 
     private static void configureCpSubsystem(Config config, IndexingConfig.Hazelcast s) {
         // Hazelcast CP Subsystem requires at least 3 CP members.
-        // We keep it at 3 (odd number) so nodes can boot and form CP once enough members join.
+        // We keep it at 3 (odd number). In the lab, the indexer is the only CP member type;
+        // search nodes do not participate in CP to avoid quorum loss when a whole PC is stopped.
         int cpMembers = 3;
-        config.getCPSubsystemConfig().setCPMemberCount(cpMembers);
-        config.getCPSubsystemConfig().setGroupSize(cpMembers);
+        var cp = config.getCPSubsystemConfig();
+        cp.setCPMemberCount(cpMembers);
+        cp.setGroupSize(cpMembers);
+
+        // Lab resiliency: after a CP member crash/restart, locks can remain held until the CP session expires.
+        // Shorten TTL so indexing doesn't appear "stuck" for minutes after a node failure.
+        cp.setSessionTimeToLiveSeconds(60);
+        cp.setSessionHeartbeatIntervalSeconds(5);
+
+        // Allow CP to remove missing members and promote new ones, so the cluster can recover quorum.
+        // This is especially important when you stop/start nodes during the demo.
+        cp.setMissingCPMemberAutoRemovalSeconds(120);
     }
 
     private static void configureJoin(Config config, IndexingConfig.Hazelcast s) {
