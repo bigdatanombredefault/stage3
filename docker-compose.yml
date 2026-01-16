@@ -59,6 +59,8 @@ services:
       - hazelcast.cluster.name=${HAZELCAST_CLUSTER_NAME:-search-cluster}
       - hazelcast.port=5701
       - JAVA_TOOL_OPTIONS=--add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED
+      - INDEXER_CONSUMERS=${INDEXER_CONSUMERS:-2}
+      - INDEXER_MAX_DELIVERIES=${INDEXER_MAX_DELIVERIES:-5}
       - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
       - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
       - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
