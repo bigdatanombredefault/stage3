@@ -7,8 +7,10 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -18,6 +20,9 @@ public class DatalakeReader {
 	private static final Logger logger = LoggerFactory.getLogger(DatalakeReader.class);
 	private final String datalakePath;
 	private final String trackingFilename;
+	private final ConcurrentHashMap<Integer, BookPaths> bookPathsCache = new ConcurrentHashMap<>();
+
+	private record BookPaths(Path headerPath, Path bodyPath) {}
 
 	public DatalakeReader(String datalakePath, String trackingFilename) {
 		if (datalakePath == null || datalakePath.isBlank()) {
@@ -103,7 +108,8 @@ public class DatalakeReader {
 	 * Read book header for a specific book ID
 	 */
 	public String readBookHeader(int bookId) throws IOException {
-		Path headerPath = findBookHeader(bookId);
+		BookPaths paths = resolveBookPaths(bookId);
+		Path headerPath = paths.headerPath();
 		if (headerPath == null) {
 			throw new IOException("Header file not found for book " + bookId);
 		}
@@ -114,7 +120,8 @@ public class DatalakeReader {
 	 * Read book body for a specific book ID
 	 */
 	public String readBookBody(int bookId) throws IOException {
-		Path bodyPath = findBookBody(bookId);
+		BookPaths paths = resolveBookPaths(bookId);
+		Path bodyPath = paths.bodyPath();
 		if (bodyPath == null) {
 			throw new IOException("Body file not found for book " + bookId);
 		}
@@ -125,33 +132,54 @@ public class DatalakeReader {
 	 * Find header file for a book (searches all bucket/timestamp structures)
 	 */
 	private Path findBookHeader(int bookId) throws IOException {
-		return findBookFile(bookId, "_header.txt");
-	}
-
-	/**
-	 * Find body file for a book (searches all bucket/timestamp structures)
-	 */
-	private Path findBookBody(int bookId) throws IOException {
-		return findBookFile(bookId, "_body.txt");
+		return resolveBookPaths(bookId).headerPath();
 	}
 
 	/**
 	 * Generic method to find a book file with a specific suffix
 	 */
-	private Path findBookFile(int bookId, String suffix) throws IOException {
-		Path datalakeDir = Paths.get(datalakePath);
+	private BookPaths resolveBookPaths(int bookId) throws IOException {
+		BookPaths cached = bookPathsCache.get(bookId);
+		if (cached != null) {
+			return cached;
+		}
 
+		BookPaths resolved = scanBookPaths(bookId);
+		// Avoid caching misses: the book may not be present yet (or could appear later).
+		if (resolved.headerPath() != null && resolved.bodyPath() != null) {
+			bookPathsCache.put(bookId, resolved);
+		}
+		return resolved;
+	}
+
+	private BookPaths scanBookPaths(int bookId) throws IOException {
+		Path datalakeDir = Paths.get(datalakePath);
 		if (!Files.exists(datalakeDir)) {
 			throw new IOException("Datalake directory not found: " + datalakePath);
 		}
 
+		String headerName = bookId + "_header.txt";
+		String bodyName = bookId + "_body.txt";
+		Path headerPath = null;
+		Path bodyPath = null;
+
 		try (Stream<Path> paths = Files.walk(datalakeDir)) {
-			return paths
-					.filter(Files::isRegularFile)
-					.filter(p -> p.getFileName().toString().equals(bookId + suffix))
-					.findFirst()
-					.orElse(null);
+			Iterator<Path> it = paths.iterator();
+			while (it.hasNext() && (headerPath == null || bodyPath == null)) {
+				Path p = it.next();
+				if (!Files.isRegularFile(p)) {
+					continue;
+				}
+				String name = p.getFileName().toString();
+				if (headerPath == null && headerName.equals(name)) {
+					headerPath = p;
+				} else if (bodyPath == null && bodyName.equals(name)) {
+					bodyPath = p;
+				}
+			}
 		}
+
+		return new BookPaths(headerPath, bodyPath);
 	}
 
 	/**
@@ -159,14 +187,15 @@ public class DatalakeReader {
 	 */
 	public boolean bookExists(int bookId) {
 		try {
-			return findBookHeader(bookId) != null && findBookBody(bookId) != null;
+			BookPaths p = resolveBookPaths(bookId);
+			return p.headerPath() != null && p.bodyPath() != null;
 		} catch (IOException e) {
 			return false;
 		}
 	}
 
     public String getBookDirectoryPath(int bookId) throws IOException {
-        Path headerPath = findBookHeader(bookId);
+		Path headerPath = findBookHeader(bookId);
 
         if (headerPath != null && headerPath.getParent() != null) {
             return headerPath.getParent().toString();

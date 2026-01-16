@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.labubus.indexing.storage.DatalakeReader;
 import org.labubus.model.BookMetadata;
@@ -18,6 +19,14 @@ import com.hazelcast.multimap.MultiMap;
 
 public class IndexingService {
     private static final Logger logger = LoggerFactory.getLogger(IndexingService.class);
+
+    private static final int MIN_TERM_LENGTH = 3;
+    private static final Set<String> STOPWORDS = Set.of(
+        "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "has", "have", "he",
+        "her", "hers", "him", "his", "i", "in", "is", "it", "its", "me", "my", "not", "of", "on",
+        "or", "our", "she", "so", "that", "the", "their", "them", "they", "this", "to", "was",
+        "we", "were", "with", "you", "your"
+    );
 
     private final HazelcastInstance hazelcast;
     private final DatalakeReader datalakeReader;
@@ -202,8 +211,16 @@ public class IndexingService {
      * A simple helper method to tokenize and clean text.
      */
     private Set<String> extractWords(String text) {
+        if (text == null || text.isBlank()) {
+            return Set.of();
+        }
         String[] tokens = tokenize(text);
-        return new HashSet<>(Arrays.asList(tokens));
+        return Arrays.stream(tokens)
+            .map(String::trim)
+            .filter(t -> !t.isEmpty())
+            .filter(t -> t.length() >= MIN_TERM_LENGTH)
+            .filter(t -> !STOPWORDS.contains(t))
+            .collect(Collectors.toCollection(HashSet::new));
     }
 
     private String[] tokenize(String text) {

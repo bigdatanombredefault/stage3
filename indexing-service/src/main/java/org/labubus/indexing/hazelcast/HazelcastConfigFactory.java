@@ -32,6 +32,7 @@ public final class HazelcastConfigFactory {
      */
     public static Config build(IndexingConfig.Hazelcast settings) {
         Config config = new Config();
+        config.setProperty("hazelcast.logging.type", "slf4j");
         configureCluster(config, settings);
         configureNetwork(config, settings);
         configureCpSubsystem(config, settings);
