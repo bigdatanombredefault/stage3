@@ -178,7 +178,6 @@ public class TimestampDatalakeStorage implements DatalakeStorage {
 	}
 
 	private Set<BookEntry> getDownloadedBookEntries() throws IOException {
-		// Only called from methods that already hold trackingLock.
 		Set<BookEntry> entries = new HashSet<>();
 		if (!Files.exists(downloadedBooksFile)) {
 			return entries;

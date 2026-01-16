@@ -84,11 +84,9 @@ public class IngestionController {
             ctx.status(400).json(IngestionResponse.failure(-1, "Invalid book_id format. Must be an integer."));
             logger.warn("Invalid book_id format in request: {}", bookIdParam);
         } catch (BookNotFoundException e) {
-            // Expected for many Gutenberg IDs; don't spam ERROR logs with stack traces.
             logger.info("Book {} not found on source: {}", bookId, e.getMessage());
             ctx.status(404).json(IngestionResponse.failure(bookId, e.getMessage()));
         } catch (BookFormatException e) {
-            // Expected for some IDs: content exists but isn't a plain-text Gutenberg file with markers.
             logger.warn("Book {} has unsupported format: {}", bookId, e.getMessage());
             ctx.status(422).json(IngestionResponse.failure(bookId, e.getMessage()));
         } catch (IOException | JMSException e) {

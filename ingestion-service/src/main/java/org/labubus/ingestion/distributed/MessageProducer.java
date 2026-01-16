@@ -69,7 +69,6 @@ public class MessageProducer {
             return configuredCurrentNodeIp.trim();
         }
 
-        // Keep a sensible default to avoid hard failures in local/dev environments.
         return "localhost";
     }
 
@@ -88,7 +87,7 @@ public class MessageProducer {
             Destination destination = session.createQueue(queueName);
 
             javax.jms.MessageProducer producer = session.createProducer(destination);
-            producer.setDeliveryMode(DeliveryMode.PERSISTENT); // Ensure message survives a broker restart
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
 
             TextMessage message = session.createTextMessage(String.valueOf(bookId));
             message.setJMSCorrelationID(String.valueOf(bookId));

@@ -48,16 +48,12 @@ public final class HazelcastConfigFactory {
     private static void configureNetwork(Config config, SearchConfig.Hazelcast s) {
         config.getNetworkConfig().setPort(s.port()).setPortAutoIncrement(false);
 
-        // In Docker, the container typically does NOT have the host's physical IP.
-        // If we force interface matching to CURRENT_NODE_IP in that situation, Hazelcast fails to start.
-        // So we only enable interface matching when CURRENT_NODE_IP is actually assigned locally.
         if (isLocalInterfaceAddress(s.currentNodeIp())) {
             config.getNetworkConfig().getInterfaces().setEnabled(true).addInterface(s.currentNodeIp());
         } else {
             config.getNetworkConfig().getInterfaces().setEnabled(false);
         }
 
-        // Still advertise the node's externally reachable address (host IP + published port).
         config.getNetworkConfig().setPublicAddress(s.currentNodeIp() + ":" + s.port());
         configureJoin(config, s);
     }
@@ -88,7 +84,6 @@ public final class HazelcastConfigFactory {
                 }
             }
         } catch (java.net.UnknownHostException | java.net.SocketException | SecurityException ignored) {
-            // If anything goes wrong (DNS, permissions), fall back to disabling interface matching.
         }
         return false;
     }
@@ -123,17 +118,14 @@ public final class HazelcastConfigFactory {
             return java.util.List.of();
         }
 
-        // If the user already specified ip:port, trust it.
         if (trimmed.contains(":")) {
             return java.util.List.of(trimmed);
         }
 
-        // If only IPs are provided, expand to all known member ports.
         if (memberPorts != null && !memberPorts.isEmpty()) {
             return memberPorts.stream().map(p -> trimmed + ":" + p).toList();
         }
 
-        // Fallback to the service's own default port.
         return java.util.List.of(trimmed + ":" + defaultPort);
     }
 

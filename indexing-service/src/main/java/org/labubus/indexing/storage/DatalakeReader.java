@@ -145,7 +145,6 @@ public class DatalakeReader {
 		}
 
 		BookPaths resolved = scanBookPaths(bookId);
-		// Avoid caching misses: the book may not be present yet (or could appear later).
 		if (resolved.headerPath() != null && resolved.bodyPath() != null) {
 			bookPathsCache.put(bookId, resolved);
 		}

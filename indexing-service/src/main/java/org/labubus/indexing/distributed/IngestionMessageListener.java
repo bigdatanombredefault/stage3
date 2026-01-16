@@ -98,7 +98,6 @@ public class IngestionMessageListener implements Runnable {
                 }
                 connection.start();
 
-                // CLIENT_ACKNOWLEDGE: we acknowledge ONLY after indexing succeeds.
                 Session session = connection.createSession(false, Session.CLIENT_ACKNOWLEDGE);
                 Destination destination = session.createQueue(queueName);
                 MessageConsumer consumer = session.createConsumer(destination, selector);
@@ -129,7 +128,6 @@ public class IngestionMessageListener implements Runnable {
                         );
                         message.acknowledge();
                     } else {
-                        // Make the broker redeliver (backoff happens in the broker redelivery policy).
                         session.recover();
                         sleep(250);
                     }
@@ -140,7 +138,6 @@ public class IngestionMessageListener implements Runnable {
                     sleep(10000);
                 }
             } finally {
-                // Each worker owns its connection; closing is handled by stop() and broker failures.
             }
         }
         logger.info("ActiveMQ Listener has shut down.");
@@ -176,7 +173,7 @@ public class IngestionMessageListener implements Runnable {
             return true;
         } catch (NumberFormatException e) {
             logger.error("Received an invalid message that was not a book ID: '{}'", messageText);
-            return true; // bad message: ack it
+            return true;
         } catch (IOException e) {
             logger.warn("Indexing failed for message '{}': {}", messageText, e.getMessage());
             return false;
@@ -205,7 +202,6 @@ public class IngestionMessageListener implements Runnable {
                 return message.getIntProperty("JMSXDeliveryCount");
             }
         } catch (JMSException ignored) {
-            // best-effort
         }
         return defaultValue;
     }

@@ -57,7 +57,6 @@ public class BookIngestionService {
     }
 
     public JobStatus startAsyncIngestion(int bookId) {
-        // Fast path: already on disk.
         if (isBookDownloaded(bookId)) {
             return new JobStatus(bookId, "available", getBookPath(bookId), null, System.currentTimeMillis());
         }

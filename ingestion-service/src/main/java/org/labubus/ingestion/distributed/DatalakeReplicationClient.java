@@ -65,7 +65,6 @@ public class DatalakeReplicationClient {
             throw new IOException("No replication targets available (cluster list empty or only self)");
         }
 
-        // Randomize try order, but keep reproducible structure for debugging.
         Collections.shuffle(candidates, random);
 
         IOException last = null;
@@ -107,7 +106,6 @@ public class DatalakeReplicationClient {
         if (trimmed.isEmpty()) {
             return null;
         }
-        // Allow inputs like "10.0.0.1:7001" by stripping an explicit port.
         int idx = trimmed.indexOf(':');
         return idx >= 0 ? trimmed.substring(0, idx) : trimmed;
     }

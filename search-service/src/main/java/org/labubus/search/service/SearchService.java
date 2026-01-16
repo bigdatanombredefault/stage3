@@ -125,7 +125,6 @@ public class SearchService {
                 try {
                     allMatchingIds.add(Integer.valueOf(docId));
                 } catch (NumberFormatException ignored) {
-                    // ignore malformed ids
                 }
             }
         }
