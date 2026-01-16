@@ -9,6 +9,7 @@ import javax.jms.JMSException;
 
 import org.labubus.ingestion.model.IngestionResponse;
 import org.labubus.ingestion.model.IngestionStatusResponse;
+import org.labubus.ingestion.service.BookFormatException;
 import org.labubus.ingestion.service.BookIngestionService;
 import org.labubus.ingestion.service.BookNotFoundException;
 import org.labubus.ingestion.storage.DatalakeStorage;
@@ -86,6 +87,10 @@ public class IngestionController {
             // Expected for many Gutenberg IDs; don't spam ERROR logs with stack traces.
             logger.info("Book {} not found on source: {}", bookId, e.getMessage());
             ctx.status(404).json(IngestionResponse.failure(bookId, e.getMessage()));
+        } catch (BookFormatException e) {
+            // Expected for some IDs: content exists but isn't a plain-text Gutenberg file with markers.
+            logger.warn("Book {} has unsupported format: {}", bookId, e.getMessage());
+            ctx.status(422).json(IngestionResponse.failure(bookId, e.getMessage()));
         } catch (IOException | JMSException e) {
             logger.error("Failed to ingest book {}: {}", bookId, e.getMessage(), e);
             ctx.status(500).json(IngestionResponse.failure(bookId, e.getMessage()));

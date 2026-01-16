@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import org.labubus.ingestion.service.BookContentParser;
+import org.labubus.ingestion.service.BookFormatException;
 import org.labubus.ingestion.storage.DatalakeStorage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +50,9 @@ public class DatalakeController {
             logger.info("Stored replicated book {} at {}", bookId, path);
         } catch (IllegalArgumentException e) {
             ctx.status(400).json(java.util.Map.of("error", e.getMessage()));
+        } catch (BookFormatException e) {
+            logger.warn("Rejected replicated book due to unsupported format: {}", e.getMessage());
+            ctx.status(422).json(java.util.Map.of("error", e.getMessage()));
         } catch (IOException e) {
             logger.error("Failed to store replicated book", e);
             ctx.status(500).json(java.util.Map.of("error", e.getMessage()));

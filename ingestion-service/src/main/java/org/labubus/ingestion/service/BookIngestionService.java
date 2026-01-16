@@ -106,6 +106,9 @@ public class BookIngestionService {
         } catch (BookNotFoundException e) {
             logger.info("Book {} not found on source: {}", bookId, e.getMessage());
             update(bookId, "failed", null, e.getMessage());
+        } catch (BookFormatException e) {
+            logger.warn("Book {} has unsupported format: {}", bookId, e.getMessage());
+            update(bookId, "failed", null, e.getMessage());
         } catch (IOException | JMSException | RuntimeException e) {
             logger.error("Async ingestion failed for book {}: {}", bookId, e.getMessage(), e);
             update(bookId, "failed", null, e.getMessage());
