@@ -15,8 +15,20 @@ services:
     profiles: ["master"]
     ports:
       - "80:80"
+    # The official nginx image automatically runs envsubst on files in /etc/nginx/templates/
+    # and writes the result to /etc/nginx/conf.d/. Set PC1_IP … PC6_IP in your .env file.
+    # For a static config (hardcoded IPs), swap the volumes block to mount nginx.conf directly.
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - PC1_IP=${PC1_IP:?PC1_IP must be set in .env}
+      - PC2_IP=${PC2_IP:?PC2_IP must be set in .env}
+      - PC3_IP=${PC3_IP:?PC3_IP must be set in .env}
+      # For a 3-node cluster, set PC4_IP=PC1_IP, PC5_IP=PC2_IP, PC6_IP=PC3_IP in your .env file.
+      # nginx deduplicates identical upstream servers automatically.
+      - PC4_IP=${PC4_IP:?PC4_IP must be set in .env (use same value as PC1_IP for a 3-node cluster)}
+      - PC5_IP=${PC5_IP:?PC5_IP must be set in .env (use same value as PC2_IP for a 3-node cluster)}
+      - PC6_IP=${PC6_IP:?PC6_IP must be set in .env (use same value as PC3_IP for a 3-node cluster)}
     networks:
       - cluster_net
     restart: unless-stopped
@@ -30,10 +42,10 @@ services:
       - "8080:8080"
     environment:
       - server.port=8080
-      - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
-      - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
-      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
-      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
+      - BROKER_URL=tcp://${MASTER_NODE_IP:?MASTER_NODE_IP must be set}:61616
+      - MASTER_NODE_IP=${MASTER_NODE_IP:?MASTER_NODE_IP must be set}
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:?CURRENT_NODE_IP must be set — use this machine LAN IP}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:?CLUSTER_NODES_LIST must be set}
       - DATA_VOLUME_PATH=/datalake
       - ingestion.async.enabled=${INGESTION_ASYNC_ENABLED:-true}
       - ingestion.async.workers=${INGESTION_ASYNC_WORKERS:-4}
@@ -56,14 +68,15 @@ services:
       - "5701:5701"
     environment:
       - server.port=8081
-      - hazelcast.cluster.name=${HAZELCAST_CLUSTER_NAME:-search-cluster}
+      # Hardcoded cluster name — must be identical on every node to prevent split-brain.
+      - hazelcast.cluster.name=search-cluster
       - hazelcast.port=5701
       - INDEXER_CONSUMERS=${INDEXER_CONSUMERS:-2}
       - INDEXER_MAX_DELIVERIES=${INDEXER_MAX_DELIVERIES:-5}
-      - BROKER_URL=tcp://${MASTER_NODE_IP:-localhost}:61616
-      - MASTER_NODE_IP=${MASTER_NODE_IP:-localhost}
-      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
-      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
+      - BROKER_URL=tcp://${MASTER_NODE_IP:?MASTER_NODE_IP must be set}:61616
+      - MASTER_NODE_IP=${MASTER_NODE_IP:?MASTER_NODE_IP must be set}
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:?CURRENT_NODE_IP must be set — use this machine LAN IP}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:?CLUSTER_NODES_LIST must be set}
       - DATA_VOLUME_PATH=/datalake
     volumes:
       - ${HOST_DATA_VOLUME_PATH:-./datalake}:/datalake
@@ -81,10 +94,11 @@ services:
       - "5702:5702"
     environment:
       - server.port=8082
-      - hazelcast.cluster.name=${HAZELCAST_CLUSTER_NAME:-search-cluster}
+      # Hardcoded cluster name — must be identical on every node to prevent split-brain.
+      - hazelcast.cluster.name=search-cluster
       - hazelcast.port=5702
-      - CURRENT_NODE_IP=${CURRENT_NODE_IP:-localhost}
-      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:-localhost}
+      - CURRENT_NODE_IP=${CURRENT_NODE_IP:?CURRENT_NODE_IP must be set — use this machine LAN IP}
+      - CLUSTER_NODES_LIST=${CLUSTER_NODES_LIST:?CLUSTER_NODES_LIST must be set}
     networks:
       - cluster_net
     restart: unless-stopped
