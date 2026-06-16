@@ -11,9 +11,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.labubus.indexing.storage.DatalakeReader;
@@ -32,11 +30,7 @@ public class IndexingService {
     private static final int MIN_TERM_LENGTH = 3;
     private static final String STOPWORDS_RESOURCE = "stopwords.txt";
 
-    private static final int LOCK_STRIPES = 64;
-    private static final long CP_TRY_LOCK_TIMEOUT_MS = 200;
-    private static final int STRIPE_PUT_CHUNK_SIZE = 2_000;
     private static final AtomicBoolean WARNED_CP_FALLBACK = new AtomicBoolean(false);
-    private static final ReentrantLock[] LOCAL_STRIPE_LOCKS = createLocalStripeLocks();
     private static final Set<String> DEFAULT_STOPWORDS = Set.of(
         "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "has", "have", "he",
         "her", "hers", "him", "his", "i", "in", "is", "it", "its", "me", "my", "not", "of", "on",
@@ -126,8 +120,39 @@ public class IndexingService {
         ensureBookExists(bookId);
 
         BookData book = readBook(bookId);
-        storeMetadata(bookId, book);
+
+        // CP FencedLock guards only the fast book-level claim (idempotency check + metadata write).
+        // The slow multimap puts happen outside the lock: ValueCollectionType.SET makes them idempotent.
+        if (!claimBook(bookId, book)) {
+            return;
+        }
         indexWords(bookId, book.body());
+    }
+
+    private boolean claimBook(int bookId, BookData book) {
+        try {
+            FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:book:" + bookId);
+            lock.lock();
+            try {
+                if (isAlreadyIndexed(bookId)) {
+                    return false;
+                }
+                storeMetadata(bookId, book);
+                return true;
+            } finally {
+                lock.unlock();
+            }
+        } catch (RuntimeException e) {
+            if (WARNED_CP_FALLBACK.compareAndSet(false, true)) {
+                logger.warn(
+                    "CP lock unavailable; proceeding without distributed lock. "
+                        + "Once 3+ CP members are online, distributed locking activates automatically. ({})",
+                    e.getMessage()
+                );
+            }
+            storeMetadata(bookId, book);
+            return true;
+        }
     }
 
     private boolean isAlreadyIndexed(int bookId) {
@@ -162,112 +187,15 @@ public class IndexingService {
 
     private void indexWords(int bookId, String body) {
         Set<String> words = extractWords(body);
-        MultiMap<String, String> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
-        String docId = String.valueOf(bookId);
-        indexWordsStriped(invertedIndex, words, docId);
-        logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
-    }
-
-    private void indexWordsStriped(MultiMap<String, String> invertedIndex, Set<String> words, String docId) {
-        if (words == null || words.isEmpty()) {
+        if (words.isEmpty()) {
             return;
         }
-
-        @SuppressWarnings("unchecked")
-        List<String>[] stripes = new List[LOCK_STRIPES];
+        MultiMap<String, String> invertedIndex = hazelcast.getMultiMap(invertedIndexName);
+        String docId = String.valueOf(bookId);
         for (String word : words) {
-            if (word == null || word.isBlank()) {
-                continue;
-            }
-            int stripe = stripeFor(word);
-            List<String> bucket = stripes[stripe];
-            if (bucket == null) {
-                bucket = new java.util.ArrayList<>();
-                stripes[stripe] = bucket;
-            }
-            bucket.add(word);
+            invertedIndex.put(word, docId);
         }
-
-        for (int i = 0; i < stripes.length; i++) {
-            List<String> bucket = stripes[i];
-            if (bucket == null || bucket.isEmpty()) {
-                continue;
-            }
-
-            // Chunking reduces how long other nodes might block on the same CP lock.
-            for (int offset = 0; offset < bucket.size(); offset += STRIPE_PUT_CHUNK_SIZE) {
-                int end = Math.min(bucket.size(), offset + STRIPE_PUT_CHUNK_SIZE);
-                try (StripeLock stripeLock = lockStripe(i)) {
-                    stripeLock.assertHeld();
-                    for (int j = offset; j < end; j++) {
-                        invertedIndex.put(bucket.get(j), docId);
-                    }
-                }
-            }
-        }
-    }
-
-    private StripeLock lockStripe(int stripe) {
-        // Preferred: CP FencedLock (rubric requirement). This will work once the cluster has >= 3 members.
-        // Fallback: local JVM lock, so a single-PC setup (2 members) still indexes/searches correctly.
-        try {
-            FencedLock cpLock = hazelcast.getCPSubsystem().getLock(lockNameForStripe(stripe));
-            boolean acquired = cpLock.tryLock(CP_TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            if (!acquired) {
-                // Likely contention; preserve CP semantics.
-                long waitStartNs = System.nanoTime();
-                cpLock.lock();
-                long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - waitStartNs);
-                if (waitedMs >= 5_000) {
-                    logger.warn("Waited {}ms for CP stripe lock {} (high contention / CP election).", waitedMs, stripe);
-                }
-            }
-            return new StripeLock(cpLock::unlock);
-        } catch (RuntimeException e) {
-            if (WARNED_CP_FALLBACK.compareAndSet(false, true)) {
-                logger.warn(
-                    "CP lock not available yet; falling back to local locks. "
-                        + "This is expected when fewer than 3 Hazelcast members are running. "
-                        + "Once 3+ members are online, CP locks will be used automatically. ({})",
-                    e.getMessage()
-                );
-            }
-            return lockStripeLocally(stripe);
-        }
-    }
-
-    private static ReentrantLock[] createLocalStripeLocks() {
-        ReentrantLock[] locks = new ReentrantLock[LOCK_STRIPES];
-        for (int i = 0; i < locks.length; i++) {
-            locks[i] = new ReentrantLock();
-        }
-        return locks;
-    }
-
-    private static StripeLock lockStripeLocally(int stripe) {
-        ReentrantLock local = LOCAL_STRIPE_LOCKS[stripe];
-        local.lock();
-        return new StripeLock(local::unlock);
-    }
-
-    private record StripeLock(Runnable unlock) implements AutoCloseable {
-        void assertHeld() {
-            // Intentionally empty. Exists to make it explicit that the lock is held while in scope,
-            // and to keep static analysis tools from flagging the resource variable as unused.
-        }
-
-        @Override
-        public void close() {
-            unlock.run();
-        }
-    }
-
-    private static int stripeFor(String word) {
-        return (word.hashCode() & 0x7fffffff) % LOCK_STRIPES;
-    }
-
-    private static String lockNameForStripe(int stripe) {
-        return "lock:inverted-index:stripe:" + stripe;
+        logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }
 
     /**
