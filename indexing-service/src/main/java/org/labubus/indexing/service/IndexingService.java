@@ -11,7 +11,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.labubus.indexing.storage.DatalakeReader;
@@ -20,7 +19,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.cp.lock.FencedLock;
 import com.hazelcast.map.IMap;
 import com.hazelcast.multimap.MultiMap;
 
@@ -30,7 +28,6 @@ public class IndexingService {
     private static final int MIN_TERM_LENGTH = 3;
     private static final String STOPWORDS_RESOURCE = "stopwords.txt";
 
-    private static final AtomicBoolean WARNED_CP_FALLBACK = new AtomicBoolean(false);
     private static final Set<String> DEFAULT_STOPWORDS = Set.of(
         "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "has", "have", "he",
         "her", "hers", "him", "his", "i", "in", "is", "it", "its", "me", "my", "not", "of", "on",
@@ -121,8 +118,6 @@ public class IndexingService {
 
         BookData book = readBook(bookId);
 
-        // CP FencedLock guards only the fast book-level claim (idempotency check + metadata write).
-        // The slow multimap puts happen outside the lock: ValueCollectionType.SET makes them idempotent.
         if (!claimBook(bookId, book)) {
             return;
         }
@@ -130,29 +125,11 @@ public class IndexingService {
     }
 
     private boolean claimBook(int bookId, BookData book) {
-        try {
-            FencedLock lock = hazelcast.getCPSubsystem().getLock("lock:book:" + bookId);
-            lock.lock();
-            try {
-                if (isAlreadyIndexed(bookId)) {
-                    return false;
-                }
-                storeMetadata(bookId, book);
-                return true;
-            } finally {
-                lock.unlock();
-            }
-        } catch (RuntimeException e) {
-            if (WARNED_CP_FALLBACK.compareAndSet(false, true)) {
-                logger.warn(
-                    "CP lock unavailable; proceeding without distributed lock. "
-                        + "Once 3+ CP members are online, distributed locking activates automatically. ({})",
-                    e.getMessage()
-                );
-            }
-            storeMetadata(bookId, book);
-            return true;
+        if (isAlreadyIndexed(bookId)) {
+            return false;
         }
+        storeMetadata(bookId, book);
+        return true;
     }
 
     private boolean isAlreadyIndexed(int bookId) {

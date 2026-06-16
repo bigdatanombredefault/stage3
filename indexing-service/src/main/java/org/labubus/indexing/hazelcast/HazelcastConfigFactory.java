@@ -35,7 +35,6 @@ public final class HazelcastConfigFactory {
         config.setProperty("hazelcast.logging.type", "slf4j");
         configureCluster(config, settings);
         configureNetwork(config, settings);
-        configureCpSubsystem(config);
         configureDataStructures(config, settings);
         configureSerialization(config);
         return config;
@@ -83,22 +82,6 @@ public final class HazelcastConfigFactory {
         } catch (java.net.UnknownHostException | java.net.SocketException | SecurityException ignored) {
         }
         return false;
-    }
-
-    private static void configureCpSubsystem(Config config) {
-        // CP Subsystem requires at least 3 members. Must be identical on every member of the cluster.
-        var cp = config.getCPSubsystemConfig();
-        cp.setCPMemberCount(3);
-        cp.setGroupSize(3);
-
-        // Lab resiliency: after a CP member crash/restart, locks can remain held until the CP session expires.
-        // Shorten TTL so indexing doesn't appear "stuck" for minutes after a node failure.
-        cp.setSessionTimeToLiveSeconds(60);
-        cp.setSessionHeartbeatIntervalSeconds(5);
-
-        // Allow CP to remove missing members and promote new ones, so the cluster can recover quorum.
-        // This is especially important when you stop/start nodes during the demo.
-        cp.setMissingCPMemberAutoRemovalSeconds(120);
     }
 
     private static void configureJoin(Config config, IndexingConfig.Hazelcast s) {

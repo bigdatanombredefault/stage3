@@ -35,7 +35,6 @@ public final class HazelcastConfigFactory {
         config.setProperty("hazelcast.logging.type", "slf4j");
         configureCluster(config, settings);
         configureNetwork(config, settings);
-        configureCpSubsystem(config);
         configureDataStructures(config, settings);
         configureSerialization(config);
         return config;
@@ -83,18 +82,6 @@ public final class HazelcastConfigFactory {
         } catch (java.net.UnknownHostException | java.net.SocketException | SecurityException ignored) {
         }
         return false;
-    }
-
-    private static void configureCpSubsystem(Config config) {
-        // cp-member-count MUST be identical on every member of the same cluster (Hazelcast requirement).
-        // Must match the indexer's value of 3; mixing 0 and 3 in the same cluster causes CP to elect
-        // search nodes as CP members but then time out because their CP subsystem is uninitialized.
-        var cp = config.getCPSubsystemConfig();
-        cp.setCPMemberCount(3);
-        cp.setGroupSize(3);
-        cp.setSessionTimeToLiveSeconds(60);
-        cp.setSessionHeartbeatIntervalSeconds(5);
-        cp.setMissingCPMemberAutoRemovalSeconds(120);
     }
 
     private static void configureJoin(Config config, SearchConfig.Hazelcast s) {
