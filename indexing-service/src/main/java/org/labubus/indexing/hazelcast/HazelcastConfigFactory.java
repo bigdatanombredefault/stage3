@@ -35,7 +35,7 @@ public final class HazelcastConfigFactory {
         config.setProperty("hazelcast.logging.type", "slf4j");
         configureCluster(config, settings);
         configureNetwork(config, settings);
-        configureCpSubsystem(config, settings);
+        configureCpSubsystem(config);
         configureDataStructures(config, settings);
         configureSerialization(config);
         return config;
@@ -70,9 +70,6 @@ public final class HazelcastConfigFactory {
         try {
             InetAddress target = InetAddress.getByName(trimmed);
             Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
-            if (ifaces == null) {
-                return false;
-            }
             while (ifaces.hasMoreElements()) {
                 NetworkInterface nif = ifaces.nextElement();
                 Enumeration<InetAddress> addrs = nif.getInetAddresses();
@@ -88,14 +85,11 @@ public final class HazelcastConfigFactory {
         return false;
     }
 
-    private static void configureCpSubsystem(Config config, IndexingConfig.Hazelcast s) {
-        // Hazelcast CP Subsystem requires at least 3 CP members.
-        // We keep it at 3 (odd number). In the lab, the indexer is the only CP member type;
-        // search nodes do not participate in CP to avoid quorum loss when a whole PC is stopped.
-        int cpMembers = 3;
+    private static void configureCpSubsystem(Config config) {
+        // CP Subsystem requires at least 3 members. Must be identical on every member of the cluster.
         var cp = config.getCPSubsystemConfig();
-        cp.setCPMemberCount(cpMembers);
-        cp.setGroupSize(cpMembers);
+        cp.setCPMemberCount(3);
+        cp.setGroupSize(3);
 
         // Lab resiliency: after a CP member crash/restart, locks can remain held until the CP session expires.
         // Shorten TTL so indexing doesn't appear "stuck" for minutes after a node failure.

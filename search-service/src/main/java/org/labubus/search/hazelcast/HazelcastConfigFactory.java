@@ -35,7 +35,7 @@ public final class HazelcastConfigFactory {
         config.setProperty("hazelcast.logging.type", "slf4j");
         configureCluster(config, settings);
         configureNetwork(config, settings);
-        configureCpSubsystem(config, settings);
+        configureCpSubsystem(config);
         configureDataStructures(config, settings);
         configureSerialization(config);
         return config;
@@ -70,9 +70,6 @@ public final class HazelcastConfigFactory {
         try {
             InetAddress target = InetAddress.getByName(trimmed);
             Enumeration<NetworkInterface> ifaces = NetworkInterface.getNetworkInterfaces();
-            if (ifaces == null) {
-                return false;
-            }
             while (ifaces.hasMoreElements()) {
                 NetworkInterface nif = ifaces.nextElement();
                 Enumeration<InetAddress> addrs = nif.getInetAddresses();
@@ -88,11 +85,10 @@ public final class HazelcastConfigFactory {
         return false;
     }
 
-    private static void configureCpSubsystem(Config config, SearchConfig.Hazelcast s) {
+    private static void configureCpSubsystem(Config config) {
         // cp-member-count MUST be identical on every member of the same cluster (Hazelcast requirement).
-        // Indexer uses 3; search nodes join the same cluster, so they must declare the same value.
-        // Hazelcast selects the first 3 members that join as the actual CP members — search nodes
-        // may or may not be selected, but the cluster can form correctly either way.
+        // Must match the indexer's value of 3; mixing 0 and 3 in the same cluster causes CP to elect
+        // search nodes as CP members but then time out because their CP subsystem is uninitialized.
         var cp = config.getCPSubsystemConfig();
         cp.setCPMemberCount(3);
         cp.setGroupSize(3);
