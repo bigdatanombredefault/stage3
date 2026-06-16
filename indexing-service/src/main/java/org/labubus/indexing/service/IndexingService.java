@@ -222,6 +222,7 @@ public class IndexingService {
      * Clears the index and re-indexes all books discovered by scanning the local datalake files.
      */
     public int rebuildIndexFromLocalFiles() throws IOException {
+        waitForPartitionStability();
         logger.info("Starting disaster-recovery index rebuild from local datalake files...");
         clearIndex();
         List<Integer> bookIds = datalakeReader.scanBookIdsFromFiles();
@@ -229,6 +230,27 @@ public class IndexingService {
         int successCount = indexAll(bookIds);
         logger.info("Disaster-recovery rebuild complete: {} books succeeded.", successCount);
         return successCount;
+    }
+
+    private void waitForPartitionStability() {
+        int maxWaitSeconds = 60;
+        for (int i = 0; i < maxWaitSeconds; i++) {
+            if (hazelcast.getPartitionService().isClusterSafe()) {
+                if (i > 0) {
+                    logger.info("Hazelcast partitions stable after {}s.", i);
+                }
+                return;
+            }
+            logger.info("Waiting for Hazelcast partition migration to complete... ({}/{}s)", i + 1, maxWaitSeconds);
+            try {
+                Thread.sleep(1_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warn("Interrupted during partition stability wait; proceeding.");
+                return;
+            }
+        }
+        logger.warn("Partition stability wait timed out ({}s); proceeding anyway.", maxWaitSeconds);
     }
 
     private void clearIndex() {
