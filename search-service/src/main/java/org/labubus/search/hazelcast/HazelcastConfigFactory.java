@@ -89,9 +89,16 @@ public final class HazelcastConfigFactory {
     }
 
     private static void configureCpSubsystem(Config config, SearchConfig.Hazelcast s) {
-        // Search is a Hazelcast member (per rubric), but it does not need CP membership.
-        // Keeping search out of CP prevents CP quorum loss when a whole PC is stopped/restarted.
-        config.getCPSubsystemConfig().setCPMemberCount(0);
+        // cp-member-count MUST be identical on every member of the same cluster (Hazelcast requirement).
+        // Indexer uses 3; search nodes join the same cluster, so they must declare the same value.
+        // Hazelcast selects the first 3 members that join as the actual CP members — search nodes
+        // may or may not be selected, but the cluster can form correctly either way.
+        var cp = config.getCPSubsystemConfig();
+        cp.setCPMemberCount(3);
+        cp.setGroupSize(3);
+        cp.setSessionTimeToLiveSeconds(60);
+        cp.setSessionHeartbeatIntervalSeconds(5);
+        cp.setMissingCPMemberAutoRemovalSeconds(120);
     }
 
     private static void configureJoin(Config config, SearchConfig.Hazelcast s) {
