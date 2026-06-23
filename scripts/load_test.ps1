@@ -1,7 +1,7 @@
-# load_test.ps1 — HTTP load test for Stage 3 benchmark (Windows replacement for wrk)
+# load_test.ps1 - HTTP load test for Stage 3 benchmark (Windows replacement for wrk)
 #
 # Sends concurrent HTTP GET requests using .NET HttpClient + PowerShell Runspaces.
-# Outputs avg, p50, p90, p95, p99, max latency and requests/sec — same metrics as wrk.
+# Outputs avg, p50, p90, p95, p99, max latency and requests/sec - same metrics as wrk.
 #
 # Usage (from PowerShell):
 #   powershell -ExecutionPolicy Bypass -File scripts\load_test.ps1 `
@@ -30,7 +30,7 @@ $errCount  = [System.Collections.Concurrent.ConcurrentBag[int]]::new()
 
 $stopAt = [DateTime]::UtcNow.AddSeconds($Duration)
 
-# Worker script — each runspace runs this in a tight loop until $stopAt
+# Worker script - each runspace runs this in a tight loop until $stopAt
 $worker = {
     param($url, $stopAt, $latencies, $errCount)
 
@@ -100,7 +100,7 @@ Write-Host ""
 
 $elapsed = ([DateTime]::UtcNow - $startTime).TotalSeconds
 
-# ── Statistics ─────────────────────────────────────────────────────────────
+# ---------- Statistics -------------------------------------------------------
 $sorted = $latencies | Sort-Object
 $total  = $sorted.Count
 $errors = $errCount.Count
