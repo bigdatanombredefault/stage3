@@ -62,10 +62,17 @@ if [[ -z "$MASTER_IP" || -z "$WORKERS_STR" ]]; then
   exit 2
 fi
 
-if ! command -v wrk &>/dev/null; then
-  echo "ERROR: wrk is not installed. Install with: apt install wrk" >&2
-  exit 1
+LOAD_TOOL=""
+if command -v wrk &>/dev/null; then
+  LOAD_TOOL="wrk"
+elif powershell.exe -Command "exit 0" &>/dev/null 2>&1 || pwsh -Command "exit 0" &>/dev/null 2>&1; then
+  LOAD_TOOL="powershell"
+  PS_EXE=$(command -v pwsh 2>/dev/null || echo "powershell.exe")
+else
+  LOAD_TOOL="curl"
+  echo "WARNING: wrk and PowerShell not found. Phase 3 will use a sequential curl fallback (avg latency only)." >&2
 fi
+log "Load test tool: $LOAD_TOOL"
 
 read -r -a WORKERS <<<"$WORKERS_STR"
 FIRST_WORKER="${WORKERS[0]}"
@@ -180,40 +187,76 @@ save "$SUMMARY" "" "=== PHASE 2: Scaling ===" \
 # ──────────────────────────────────────────────────────────────────────────────
 # PHASE 3: Load test (concurrent search queries via wrk)
 # ──────────────────────────────────────────────────────────────────────────────
-hdr "PHASE 3 — Load test (wrk, ${WRK_DURATION}s)"
+hdr "PHASE 3 — Load test (${LOAD_TOOL}, ${WRK_DURATION}s)"
 LOAD_FILE="$RESULTS_DIR/phase3_load.txt"
+LOAD_URL="http://$MASTER_IP/search?q=${SEARCH_TERM}&limit=10"
+log "Target: $LOAD_URL"
 
-log "Running wrk against Nginx (http://$MASTER_IP/search?q=$SEARCH_TERM)..."
-log "  Threads: $WRK_THREADS | Connections: $WRK_CONNECTIONS | Duration: ${WRK_DURATION}s"
+AVG_LATENCY="N/A"
+P99_LATENCY="N/A"
+REQUESTS_SEC="N/A"
 
-wrk -t "$WRK_THREADS" \
-    -c "$WRK_CONNECTIONS" \
-    -d "${WRK_DURATION}s" \
-    --latency \
-    "http://$MASTER_IP/search?q=${SEARCH_TERM}&limit=10" \
+if [[ "$LOAD_TOOL" == "wrk" ]]; then
+  log "Running wrk — threads=$WRK_THREADS connections=$WRK_CONNECTIONS duration=${WRK_DURATION}s"
+  wrk -t "$WRK_THREADS" \
+      -c "$WRK_CONNECTIONS" \
+      -d "${WRK_DURATION}s" \
+      --latency \
+      "$LOAD_URL" \
+      2>&1 | tee "$LOAD_FILE"
+
+  AVG_LATENCY=$(grep "Latency" "$LOAD_FILE" | grep -v "Distribution" | awk '{print $2}' || echo "N/A")
+  P99_LATENCY=$(grep "99%" "$LOAD_FILE" | awk '{print $2}' || echo "N/A")
+  REQUESTS_SEC=$(grep "Requests/sec" "$LOAD_FILE" | awk '{print $2}' || echo "N/A")
+
+elif [[ "$LOAD_TOOL" == "powershell" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  PS_SCRIPT="$SCRIPT_DIR/load_test.ps1"
+  log "Running PowerShell load test — connections=$WRK_CONNECTIONS duration=${WRK_DURATION}s"
+  "$PS_EXE" -ExecutionPolicy Bypass -File "$PS_SCRIPT" \
+    -Url "$LOAD_URL" \
+    -Connections "$WRK_CONNECTIONS" \
+    -Duration "$WRK_DURATION" \
     2>&1 | tee "$LOAD_FILE"
 
-log "wrk complete. Results saved to $LOAD_FILE"
+  AVG_LATENCY=$(grep "Avg latency" "$LOAD_FILE" | awk '{print $NF}' || echo "N/A")
+  P99_LATENCY=$(grep "p99 latency" "$LOAD_FILE" | awk '{print $NF}' || echo "N/A")
+  REQUESTS_SEC=$(grep "Requests/sec" "$LOAD_FILE" | awk '{print $NF}' || echo "N/A")
 
-# Also collect docker stats snapshot from master
-log "Collecting docker stats snapshot from master..."
+else
+  # Sequential curl fallback — avg latency only, no concurrency
+  log "WARNING: Running sequential curl fallback (100 requests, no concurrency)."
+  log "For proper load test results use wrk (Linux) or ensure PowerShell is available."
+  TOTAL_MS=0
+  COUNT=0
+  for i in $(seq 1 100); do
+    ms=$(curl -s -o /dev/null -w "%{time_total}" "$LOAD_URL" 2>/dev/null || echo "0")
+    ms_int=$(awk "BEGIN{printf \"%.0f\", $ms * 1000}")
+    TOTAL_MS=$((TOTAL_MS + ms_int))
+    COUNT=$((COUNT + 1))
+  done
+  AVG_LATENCY="${TOTAL_MS}ms / ${COUNT} = $(awk "BEGIN{printf \"%.1f\", $TOTAL_MS / $COUNT}")ms avg"
+  printf 'Curl fallback: %s\n' "$AVG_LATENCY" | tee "$LOAD_FILE"
+fi
+
+log "Load test complete. Results saved to $LOAD_FILE"
+
+# Collect docker stats snapshot from master (local only — no SSH available)
+log "Collecting docker stats snapshot from this node..."
 DOCKER_STATS_FILE="$RESULTS_DIR/phase3_docker_stats.txt"
-# Run docker stats for 5 seconds, non-streaming (capture a few samples)
-timeout 6 docker stats --no-stream 2>/dev/null | tee "$DOCKER_STATS_FILE" || true
-
-# Extract wrk key metrics from output
-AVG_LATENCY=$(grep "Latency" "$LOAD_FILE" | grep -v "Distribution" | awk '{print $2}' || echo "N/A")
-P99_LATENCY=$(grep "99%" "$LOAD_FILE" | awk '{print $2}' || echo "N/A")
-REQUESTS_SEC=$(grep "Requests/sec" "$LOAD_FILE" | awk '{print $2}' || echo "N/A")
+docker stats --no-stream \
+  --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}' \
+  2>/dev/null | tee "$DOCKER_STATS_FILE" || true
+log "NOTE: Run 'docker stats --no-stream' manually on each worker PC and save to benchmarks/results/docker_stats_<hostname>.txt"
 
 save "$SUMMARY" "" "=== PHASE 3: Load test ===" \
-  "  Tool: wrk" \
-  "  Target: http://$MASTER_IP/search?q=$SEARCH_TERM" \
-  "  Threads: $WRK_THREADS | Connections: $WRK_CONNECTIONS | Duration: ${WRK_DURATION}s" \
+  "  Tool: $LOAD_TOOL" \
+  "  Target: $LOAD_URL" \
+  "  Connections: $WRK_CONNECTIONS | Duration: ${WRK_DURATION}s" \
   "  Avg latency: $AVG_LATENCY" \
-  "  p99 latency: $P99_LATENCY  (wrk --latency reports 50/75/90/99 buckets; p95 not available)" \
+  "  p99 latency: $P99_LATENCY" \
   "  Requests/sec: $REQUESTS_SEC" \
-  "  Full wrk output: phase3_load.txt"
+  "  Full output: phase3_load.txt"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PHASE 4: Failure test (stop one node, measure recovery)

@@ -116,7 +116,6 @@ docker compose --profile node up -d
 ```
 
 In these configurations you’ll have at least 3 Hazelcast members very quickly (each PC contributes 2 members: indexer + search).
-Once the cluster reaches 3+ members, the indexer automatically uses CP `FencedLock` for writes.
 
 ActiveMQ web UI:
 
@@ -126,7 +125,6 @@ ActiveMQ web UI:
 
 - Ensure `CURRENT_NODE_IP` is set to the **physical machine IP** (not `localhost`) when you’re on the lab network.
 - Ensure `CLUSTER_NODES_LIST` contains **all worker IPs**, including the master (because master is also a worker).
-- CP subsystem note: only **indexer** Hazelcast members participate in CP (search members do not). This keeps CP quorum stable when you stop/restart a whole PC during the demo.
 
 ## Nginx load balancer (optional)
 
