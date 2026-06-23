@@ -60,7 +60,8 @@ $worker = {
 }
 
 # Create a runspace pool with $Connections max threads
-$pool = [System.Management.Automation.Runspaces.RunspacePool]::CreateRunspacePool(1, $Connections)
+# [runspacefactory] type accelerator works in both PS 5.x and PS 7
+$pool = [runspacefactory]::CreateRunspacePool(1, $Connections)
 $pool.Open()
 
 $handles = @()
@@ -93,8 +94,7 @@ foreach ($h in $handles) {
     try { [void]$h.PS.EndInvoke($h.Handle) } catch {}
     $h.PS.Dispose()
 }
-$pool.Close()
-$pool.Dispose()
+if ($pool) { $pool.Close(); $pool.Dispose() }
 
 Write-Host ""
 

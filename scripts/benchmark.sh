@@ -141,7 +141,7 @@ log "Waiting 15s for indexing to complete..."
 sleep 15
 
 INDEXED_AFTER=$(curl -s "http://$FIRST_WORKER:8082/stats" || echo '{}')
-INGEST_RATE=$(echo "scale=2; $INGEST_COUNT / $ELAPSED" | bc 2>/dev/null || echo "N/A")
+INGEST_RATE=$(awk "BEGIN{printf \"%.2f\", $INGEST_COUNT / $ELAPSED}" 2>/dev/null || echo "N/A")
 
 log "  Elapsed: ${ELAPSED}s | Approx ingestion rate: ${INGEST_RATE} docs/s"
 log "  Stats after baseline: $INDEXED_AFTER"
@@ -180,7 +180,7 @@ log "Waiting 15s for indexing..."
 sleep 15
 
 STATS_AFTER_SCALING=$(curl -s "http://$FIRST_WORKER:8082/stats" || echo '{}')
-INGEST_RATE_SCALED=$(echo "scale=2; $INGEST_COUNT / $ELAPSED" | bc 2>/dev/null || echo "N/A")
+INGEST_RATE_SCALED=$(awk "BEGIN{printf \"%.2f\", $INGEST_COUNT / $ELAPSED}" 2>/dev/null || echo "N/A")
 
 log "  Elapsed: ${ELAPSED}s | Approx ingestion rate: ${INGEST_RATE_SCALED} docs/s"
 log "  Stats: $STATS_AFTER_SCALING"
@@ -220,11 +220,13 @@ elif [[ "$LOAD_TOOL" == "powershell" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   PS_SCRIPT="$SCRIPT_DIR/load_test.ps1"
   log "Running PowerShell load test — connections=$WRK_CONNECTIONS duration=${WRK_DURATION}s"
-  "$PS_EXE" -ExecutionPolicy Bypass -File "$PS_SCRIPT" \
-    -Url "$LOAD_URL" \
-    -Connections "$WRK_CONNECTIONS" \
-    -Duration "$WRK_DURATION" \
-    2>&1 | tee "$LOAD_FILE"
+  # '|| true' inside the group prevents set -euo pipefail from killing the script
+  # when powershell.exe exits non-zero (e.g. a non-fatal RunspacePool warning).
+  { "$PS_EXE" -ExecutionPolicy Bypass -File "$PS_SCRIPT" \
+      -Url "$LOAD_URL" \
+      -Connections "$WRK_CONNECTIONS" \
+      -Duration "$WRK_DURATION" \
+      2>&1 || true; } | tee "$LOAD_FILE"
 
   AVG_LATENCY=$(grep "Avg latency" "$LOAD_FILE" | awk '{print $NF}' || echo "N/A")
   P99_LATENCY=$(grep "p99 latency" "$LOAD_FILE" | awk '{print $NF}' || echo "N/A")
