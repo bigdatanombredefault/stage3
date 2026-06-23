@@ -69,6 +69,13 @@ if [[ -z "$MASTER_IP" || -z "$WORKERS_STR" ]]; then
   exit 2
 fi
 
+log()  { printf '\n[%s] %s\n' "$(date +'%H:%M:%S')" "$*"; }
+hdr()  { printf '\n══════════════════════════════════════\n%s\n══════════════════════════════════════\n' "$*"; }
+save() { local file="$1"; shift; printf '%s\n' "$@" | tee -a "$file"; }
+
+read -r -a WORKERS <<<"$WORKERS_STR"
+FIRST_WORKER="${WORKERS[0]}"
+
 LOAD_TOOL=""
 if command -v wrk &>/dev/null; then
   LOAD_TOOL="wrk"
@@ -80,13 +87,6 @@ else
   echo "WARNING: wrk and PowerShell not found. Phase 3 will use a sequential curl fallback (avg latency only)." >&2
 fi
 log "Load test tool: $LOAD_TOOL"
-
-read -r -a WORKERS <<<"$WORKERS_STR"
-FIRST_WORKER="${WORKERS[0]}"
-
-log()  { printf '\n[%s] %s\n' "$(date +'%H:%M:%S')" "$*"; }
-hdr()  { printf '\n══════════════════════════════════════\n%s\n══════════════════════════════════════\n' "$*"; }
-save() { local file="$1"; shift; printf '%s\n' "$@" | tee -a "$file"; }
 
 mkdir -p "$RESULTS_DIR"
 SUMMARY="$RESULTS_DIR/summary.txt"
