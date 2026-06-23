@@ -22,6 +22,7 @@ set -euo pipefail
 MASTER_IP=""
 WORKERS_STR=""
 INGEST_COUNT=50
+INGEST_START=1
 WRK_DURATION=30
 WRK_THREADS=4
 WRK_CONNECTIONS=50
@@ -30,27 +31,33 @@ SEARCH_TERM="the"
 
 usage() {
   cat <<EOF
-Usage: bash scripts/benchmark.sh --master <IP> --workers "<IP1> <IP2> ..."
+Usage: bash scripts/benchmark.sh --master <IP> --workers "<IP1> <IP2> ..." [options]
 
 Options:
-  --master      IP of the master node (ActiveMQ + Nginx)
-  --workers     Space-separated list of ALL worker node IPs (including master)
-  --count       Books to ingest per phase (default: $INGEST_COUNT)
-  --duration    wrk test duration in seconds (default: $WRK_DURATION)
-  --term        Search term for load test (default: $SEARCH_TERM)
+  --master        IP of the master node (ActiveMQ + Nginx)
+  --workers       Space-separated list of ALL worker node IPs (including master)
+  --count         Books to ingest per phase (default: $INGEST_COUNT)
+  --ingest-start  First book ID to ingest (default: $INGEST_START)
+                  Set this to a fresh range for each scaling config so you
+                  never re-ingest already-cached books (e.g. 301, 401, 501).
+  --duration      Load test duration in seconds (default: $WRK_DURATION)
+  --term          Search term for load test (default: $SEARCH_TERM)
 
-Example:
-  bash scripts/benchmark.sh --master 10.26.14.200 --workers "10.26.14.200 10.26.14.201 10.26.14.202"
+Example (3 scaling configs, each using 50 fresh books):
+  bash scripts/benchmark.sh --master IP --workers "IP"            --ingest-start 301 --count 50
+  bash scripts/benchmark.sh --master IP --workers "IP IP2 IP3"   --ingest-start 351 --count 50
+  bash scripts/benchmark.sh --master IP --workers "IP IP2 .. IP6" --ingest-start 401 --count 50
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --master)    MASTER_IP="${2:-}"; shift 2 ;;
-    --workers)   WORKERS_STR="${2:-}"; shift 2 ;;
-    --count)     INGEST_COUNT="${2:-}"; shift 2 ;;
-    --duration)  WRK_DURATION="${2:-}"; shift 2 ;;
-    --term)      SEARCH_TERM="${2:-}"; shift 2 ;;
+    --master)         MASTER_IP="${2:-}";    shift 2 ;;
+    --workers)        WORKERS_STR="${2:-}";  shift 2 ;;
+    --count)          INGEST_COUNT="${2:-}"; shift 2 ;;
+    --ingest-start)   INGEST_START="${2:-}"; shift 2 ;;
+    --duration)       WRK_DURATION="${2:-}"; shift 2 ;;
+    --term)           SEARCH_TERM="${2:-}";  shift 2 ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
   esac
@@ -124,7 +131,7 @@ START_TS=$(date +%s)
 bash scripts/lab_ingest_first_n.sh \
   --nodes "$FIRST_WORKER" \
   --count "$INGEST_COUNT" \
-  --start 1 \
+  --start "$INGEST_START" \
   --concurrency 10 \
   --async true 2>&1 | tee "$BASELINE_FILE"
 END_TS=$(date +%s)
@@ -163,7 +170,7 @@ START_TS=$(date +%s)
 bash scripts/lab_ingest_first_n.sh \
   --nodes "$WORKERS_STR" \
   --count "$INGEST_COUNT" \
-  --start $((INGEST_COUNT + 1)) \
+  --start $((INGEST_START + INGEST_COUNT)) \
   --concurrency 30 \
   --async true 2>&1 | tee "$SCALING_FILE"
 END_TS=$(date +%s)
