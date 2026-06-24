@@ -1,4 +1,4 @@
-# Running Stage 3 in a Physical Lab Cluster (No Swarm)
+# Running Stage 3 in a Physical Lab Cluster
 
 This stage runs a search engine as 3 Java services:
 
@@ -7,22 +7,6 @@ This stage runs a search engine as 3 Java services:
 - **search-service** (REST API + Hazelelcast member) on `:8082` + Hazelcast `:5702`
 
 It is designed for **physical nodes with static IPs** using **Docker Compose profiles** (no Swarm, no overlay DNS).
-
-## What changed (the “new method”)
-
-Two key changes make continuous load tests stable and efficient:
-
-1) **Async ingestion**
-
-- `POST /ingest/{book_id}` can return immediately (`202`) while the download/replication happens in the background.
-- You poll `GET /ingest/status/{book_id}` until the status becomes `available`.
-
-2) **Index where ingested (locality routing)**
-
-- The crawler publishes an ActiveMQ message with a `sourceNodeIp` property.
-- Each indexer uses a JMS selector so it consumes only messages whose `sourceNodeIp` matches its own `CURRENT_NODE_IP`.
-
-Result: you can keep the datalake **partitioned + replicated (R=2)** and still guarantee that indexers only index files they have locally.
 
 ## Recommended topology
 
@@ -85,8 +69,6 @@ INGESTION_ASYNC_WORKERS=4
 ```
 
 ## How to run
-
-Run everything from the folder containing `docker-compose.yml`.
 
 ### 1) Base test (1 PC only: master + node)
 
@@ -171,7 +153,7 @@ Load-balanced entrypoint:
 - `GET /books?limit=N`
 - `GET /search?q=term&limit=N&author=...&language=...&year=...`
 
-## End-to-end smoke test (ingest → index → search)
+## End-to-end test (ingest → index → search)
 
 Use a worker IP (replace `<W1>` with a real worker IP).
 
@@ -246,87 +228,6 @@ curl -s "http://<W1>:8082/search?q=the&limit=10"
 If Nginx is configured:
 ```
 curl -i "http://<MASTER_NODE_IP>/search?q=the&limit=5" | grep -i X-Upstream-Addr
-```
-
-## Heavy testing (before benchmarks): ingest the first 1000 book IDs
-
-This is a practical stress test to validate ingestion throughput, replication, ActiveMQ messaging, indexing, and Hazelcast distribution.
-
-Important caveat: Gutenberg IDs are **sparse** (some IDs don't exist / aren't available in the chosen format). Expect failures — that’s fine for load testing.
-
-### Recommended 3-node lab setup
-
-If you have 3 physical machines running the `node` profile (for example `W1`, `W2`, `W3`):
-
-- Make sure each worker can reach the others on Hazelcast ports `5701` and `5702`.
-- Set `CLUSTER_NODES_LIST` to include both ports for all workers (example above).
-
-### 1) Start the cluster
-
-- On the master PC:
-  - `docker compose --profile master up -d`
-- On each worker PC (`W1`, `W2`, `W3`):
-  - `docker compose --profile node up -d`
-
-### 2) Dispatch ingestion requests round-robin across the 3 crawlers
-
-From any machine that can reach the workers (often the master), run:
-
-```
-chmod +x scripts/lab_ingest_first_n.sh
-scripts/lab_ingest_first_n.sh --nodes "<W1_IP> <W2_IP> <W3_IP>" --count 1000 --concurrency 30
-```
-
-What this does:
-
-- Sends `POST /ingest/{book_id}?async=true` for IDs `1..1000`.
-- Distributes requests in round-robin: book 1 → W1, book 2 → W2, book 3 → W3, book 4 → W1, ...
-- Uses client-side concurrency (`--concurrency`) so you can ramp load.
-
-### 3) Watch the system in real time
-
-Open 2–4 terminals (on the master or any machine with access):
-
-Per-node crawler activity:
-
-```
-watch -n 2 'curl -s http://<W1_IP>:8080/health'
-watch -n 2 'curl -s http://<W2_IP>:8080/health'
-watch -n 2 'curl -s http://<W3_IP>:8080/health'
-```
-
-Per-node indexing progress:
-
-```
-watch -n 2 'curl -s http://<W1_IP>:8081/index/status'
-watch -n 2 'curl -s http://<W2_IP>:8081/index/status'
-watch -n 2 'curl -s http://<W3_IP>:8081/index/status'
-```
-
-Cluster-visible search stats (should rise as indexing completes):
-
-```
-watch -n 2 'curl -s http://<W1_IP>:8082/stats'
-```
-
-If using Nginx, confirm load balancing and which backend served the request:
-
-```
-curl -i "http://<MASTER_NODE_IP>/search?q=the&limit=5" | grep -i X-Upstream-Addr
-```
-
-And for deep visibility, tail logs on each worker:
-
-- `docker logs -f <crawler_container_name>`
-- `docker logs -f <indexer_container_name>`
-- `docker logs -f <search_container_name>`
-
-ActiveMQ queue visibility:
-
-- `http://<MASTER_NODE_IP>:8161`
-
-```
-curl -s "http://<MASTER_NODE_IP>/search?q=the&limit=10"
 ```
 
 ## What to check when something is wrong
