@@ -343,7 +343,7 @@ The video must be **4–7 minutes** (max 10) and follow this sequence:
 | 4:30–6:00 | Node failure + recovery | `docker compose down` on a worker, prove Nginx reroutes |
 | 6:00–7:00 | Monitoring | `docker stats`, ActiveMQ UI, `time curl ...` |
 
-Full step-by-step narration script: [`docs/video_guide.md`](docs/video_guide.md).
+Full step-by-step narration script: [`docs/video_guide.md`](video_guide.md).
 
 After recording:
 1. Upload to YouTube as **Unlisted** (not Private).

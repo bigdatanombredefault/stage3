@@ -68,7 +68,7 @@ curl http://localhost:8082/health
 
 ## Cluster Deployment (multiple physical lab PCs)
 
-See [`CLUSTER_DEPLOYMENT.md`](CLUSTER_DEPLOYMENT.md) for the full step-by-step guide, including:
+See [`CLUSTER_DEPLOYMENT.md`](docs/cluster_deployment.md) for the full step-by-step guide, including:
 - How to find each PC's LAN IP
 - The git-based shared IP workflow (push once, pull on every PC)
 - Starting master and worker nodes
@@ -112,7 +112,7 @@ See [`CLUSTER_DEPLOYMENT.md`](CLUSTER_DEPLOYMENT.md) for the full step-by-step g
 
 ## Benchmarking
 
-See [`BENCHMARK.md`](BENCHMARK.md) for the complete lab benchmark guide — configurations A/B/C (1/3/6 nodes), ingestion scripts, wrk load tests, and result collection.
+See [`BENCHMARK.md`](docs/benchmarks.md) for the complete lab benchmark guide — configurations A/B/C (1/3/6 nodes), ingestion scripts, wrk load tests, and result collection.
 
 ---
 
