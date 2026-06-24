@@ -1,0 +1,23 @@
+=== Stage 3 Load Test ===
+URL        : http://10.26.14.233/search?q=the&limit=10
+Connections: 50
+Duration   : 30s
+
+  Running... 29s left | requests so far: 303     Running... 29s left | requests so far: 738     Running... 28s left | requests so far: 1079     Running... 28s left | requests so far: 1781     Running... 27s left | requests so far: 2532     Running... 27s left | requests so far: 3190     Running... 26s left | requests so far: 3866     Running... 26s left | requests so far: 4573     Running... 25s left | requests so far: 5263     Running... 25s left | requests so far: 5902     Running... 24s left | requests so far: 6523     Running... 24s left | requests so far: 7203     Running... 23s left | requests so far: 7971     Running... 23s left | requests so far: 8720     Running... 22s left | requests so far: 9428     Running... 22s left | requests so far: 10192     Running... 21s left | requests so far: 10896     Running... 20s left | requests so far: 11670     Running... 20s left | requests so far: 12404     Running... 19s left | requests so far: 13097     Running... 19s left | requests so far: 13881     Running... 18s left | requests so far: 14664     Running... 18s left | requests so far: 15402     Running... 17s left | requests so far: 16137     Running... 17s left | requests so far: 16842     Running... 16s left | requests so far: 17538     Running... 16s left | requests so far: 18293     Running... 15s left | requests so far: 19069     Running... 15s left | requests so far: 19795     Running... 14s left | requests so far: 20518     Running... 14s left | requests so far: 21167     Running... 13s left | requests so far: 21847     Running... 13s left | requests so far: 22593     Running... 12s left | requests so far: 23270     Running... 12s left | requests so far: 24057     Running... 11s left | requests so far: 24804     Running... 11s left | requests so far: 25591     Running... 10s left | requests so far: 26388     Running... 10s left | requests so far: 27143     Running... 9s left | requests so far: 27763     Running... 9s left | requests so far: 28456     Running... 8s left | requests so far: 29173     Running... 8s left | requests so far: 29856     Running... 7s left | requests so far: 30492     Running... 7s left | requests so far: 31175     Running... 6s left | requests so far: 31924     Running... 6s left | requests so far: 32579     Running... 5s left | requests so far: 33336     Running... 5s left | requests so far: 34178     Running... 4s left | requests so far: 34926     Running... 4s left | requests so far: 35587     Running... 3s left | requests so far: 36288     Running... 3s left | requests so far: 37064     Running... 2s left | requests so far: 37817     Running... 1s left | requests so far: 38654     Running... 1s left | requests so far: 39430     Running... 0s left | requests so far: 40250     Waiting for last requests to finish...                      
+
+Latency Distribution
+  50%         34,44 ms
+  75%         41,51 ms
+  90%         50,27 ms
+  95%         57,46 ms
+  99%         79,01 ms
+
+  Avg latency:                   36,08 ms
+  p95 latency:                   57,46 ms
+  p99 latency:                   79,01 ms
+  Max latency:                  196,66 ms
+  Total requests:                40956
+  Requests/sec:                1237,77
+  Errors:                            0
+
+Duration: 33.1s | Connections: 50

@@ -1,0 +1,4 @@
+timestamp,label,nodes,books_dispatched_p1,books_indexed_p1,ingest_rate_p1,tokens_per_s_p1,books_dispatched_p2,books_indexed_p2,ingest_rate_p2,tokens_per_s_p2,query_avg_ms,query_p95_ms,query_p99_ms,query_max_ms,requests_per_sec,cpu_indexer_pct,cpu_search_pct,mem_indexer,mem_search,recovery_s,results_dir
+2026-06-23T19:56:18,1node,1,50,22,0.23,618,50,19,0.18,466,68,68 ms,105,89 ms,153,80 ms,7476,61 ms,646,73,65.46,20.99,562.3MiB,616.2MiB,N/A,benchmarks/results/20260623_195214
+2026-06-23T20:06:23,3node,3,50,15,0.15,427,50,10,0.14,229,48,25 ms,76,62 ms,105,24 ms,5147,39 ms,919,25,21.85,16.27,302.1MiB,278.9MiB,2,benchmarks/results/20260623_200223
+2026-06-23T20:11:44,6node,6,50,8,0.12,192,50,25,0.41,326,36,08 ms,57,46 ms,79,01 ms,196,66 ms,1237,77,25.87,12.99,405.6MiB,360.5MiB,0,benchmarks/results/20260623_200802

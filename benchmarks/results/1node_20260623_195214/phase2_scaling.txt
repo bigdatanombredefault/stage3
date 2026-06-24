@@ -1,0 +1,78 @@
+19:53:54 Dispatching COUNT=50 START=51 across 1 nodes (concurrency=30, async=true)
+19:54:15 node=10.26.14.233 book=62 http=201
+19:54:16 node=10.26.14.233 book=65 http=201
+19:54:16 node=10.26.14.233 book=68 http=201
+19:54:16 node=10.26.14.233 book=81 http=201
+19:54:17 node=10.26.14.233 book=80 http=201
+19:54:18 node=10.26.14.233 book=55 http=201
+19:54:18 node=10.26.14.233 book=82 http=201
+19:54:19 node=10.26.14.233 book=73 http=201
+19:54:19 node=10.26.14.233 book=74 http=201
+19:54:19 node=10.26.14.233 book=76 http=201
+19:54:20 node=10.26.14.233 book=86 http=201
+19:54:21 node=10.26.14.233 book=90 http=201
+19:54:21 node=10.26.14.233 book=91 http=201
+19:54:21 node=10.26.14.233 book=89 http=201
+19:54:22 node=10.26.14.233 book=66 http=201
+19:54:23 node=10.26.14.233 book=84 http=201
+19:54:23 node=10.26.14.233 book=87 http=201
+19:54:23 node=10.26.14.233 book=85 http=201
+19:54:24 node=10.26.14.233 book=97 http=201
+19:54:24 node=10.26.14.233 book=88 http=201
+curl: (28) Operation timed out after 30007 milliseconds with 0 bytes received
+19:54:24 node=10.26.14.233 book=51 http=000000
+curl: (28) Operation timed out after 30014 milliseconds with 0 bytes received
+curl: (28) Operation timed out after 30003 milliseconds with 0 bytes received
+19:54:24 node=10.26.14.233 book=52 http=000000
+curl: (28) Operation timed out after 30010 milliseconds with 0 bytes received
+19:54:24 node=10.26.14.233 book=53 http=000000
+19:54:24 node=10.26.14.233 book=54 http=000000
+19:54:24 node=10.26.14.233 book=99 http=201
+curl: (28) Operation timed out after 30011 milliseconds with 0 bytes received
+19:54:24 node=10.26.14.233 book=56 http=000000
+curl: (28) Operation timed out after 30007 milliseconds with 0 bytes received
+curl: (28) Operation timed out after 30015 milliseconds with 0 bytes received
+curl: (28) Operation timed out after 30002 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=57 http=000000
+19:54:25 node=10.26.14.233 book=58 http=000000
+19:54:25 node=10.26.14.233 book=59 http=000000
+curl: (28) Operation timed out after 30004 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=60 http=000000
+curl: (28) Operation timed out after 30005 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=61 http=000000
+curl: (28) Operation timed out after 30010 milliseconds with 0 bytes received
+curl: (28) Operation timed out after 30003 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=64 http=000000
+19:54:25 node=10.26.14.233 book=63 http=000000
+curl: (28) Operation timed out after 30012 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=67 http=000000
+curl: (28) Operation timed out after 30003 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=69 http=000000
+curl: (28) Operation timed out after 30005 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=83 http=201
+curl: (28) Operation timed out after 30003 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=70 http=000000
+19:54:25 node=10.26.14.233 book=71 http=000000
+curl: (28) Operation timed out after 30010 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=94 http=201
+19:54:25 node=10.26.14.233 book=72 http=000000
+curl: (28) Operation timed out after 30013 milliseconds with 0 bytes received
+19:54:25 node=10.26.14.233 book=75 http=000000
+curl: (28) Operation timed out after 30006 milliseconds with 0 bytes received
+curl: (28) Operation timed out after 30013 milliseconds with 0 bytes received
+19:54:26 node=10.26.14.233 book=77 http=000000
+curl: (28) Operation timed out after 30001 milliseconds with 0 bytes received
+19:54:26 node=10.26.14.233 book=78 http=000000
+19:54:26 node=10.26.14.233 book=79 http=000000
+19:54:26 node=10.26.14.233 book=92 http=201
+19:54:27 node=10.26.14.233 book=93 http=201
+19:54:27 node=10.26.14.233 book=96 http=201
+19:54:29 node=10.26.14.233 book=98 http=201
+19:54:31 node=10.26.14.233 book=100 http=201
+curl: (28) Operation timed out after 30009 milliseconds with 0 bytes received
+19:54:53 node=10.26.14.233 book=95 http=000000
+19:54:53 Done dispatching. Monitoring tips:
+19:54:53 - Per node downloaded count: curl -s http://<NODE>:8080/ingest/list
+19:54:53 - Per node indexing status:  curl -s http://<NODE>:8081/index/status
+19:54:53 - Per node search stats:     curl -s http://<NODE>:8082/stats
+19:54:53 - Nginx backend selection:   curl -i http://<MASTER_IP>/search?q=the | grep X-Upstream-Addr

@@ -1,0 +1,41 @@
+Benchmark run: Tue Jun 23 19:52:14 HGMT 2026
+Master: 10.26.14.233
+Workers: 10.26.14.233
+---
+Pre-flight stats: {"total_books":0,"unique_words":0}
+
+=== PHASE 1: Baseline ===
+  Nodes: 1 (10.26.14.233)
+  Books dispatched: 50
+  Books indexed in window: 22
+  Dispatch elapsed: 52s  |  Total window: 97s
+  Ingestion rate: 0.23 docs/s  (books fully indexed / total window)
+  Indexing throughput: 618 tokens/s  (unique_words delta / total window)
+  Stats: {"total_books":22,"unique_words":59947}
+  Baseline query 1: 0.073555s
+  Baseline query 2: 0.006907s
+  Baseline query 3: 0.006624s
+
+=== PHASE 2: Scaling ===
+  Nodes: 1 (10.26.14.233)
+  Books dispatched: 50
+  Books indexed in window: 19
+  Dispatch elapsed: 59s  |  Total window: 104s
+  Ingestion rate: 0.18 docs/s  (books fully indexed / total window)
+  Indexing throughput: 466 tokens/s  (unique_words delta / total window)
+  Stats: {"total_books":42,"unique_words":108956}
+
+=== PHASE 3: Load test ===
+  Tool: powershell
+  Target: http://10.26.14.233/search?q=the&limit=10
+  Connections: 50 | Duration: 30s
+  Avg latency: 68,68 ms
+  p95 latency: 105,89 ms
+  p99 latency: 153,80 ms
+  Max latency: 7476,61 ms
+  Requests/sec: 646,73
+  CPU indexer: 65.46%  |  CPU search: 20.99%
+  Mem indexer: 562.3MiB  |  Mem search: 616.2MiB
+  Full output: phase3_load.txt
+
+=== PHASE 4: Failure test === SKIPPED (need >= 2 nodes)

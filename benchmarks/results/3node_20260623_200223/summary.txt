@@ -1,0 +1,44 @@
+Benchmark run: Tue Jun 23 20:02:24 HGMT 2026
+Master: 10.26.14.233
+Workers: 10.26.14.231 10.26.14.232 10.26.14.233
+---
+Pre-flight stats: {"unique_words":1098,"total_books":3}
+
+=== PHASE 1: Baseline ===
+  Nodes: 1 (10.26.14.231)
+  Books dispatched: 50
+  Books indexed in window: 15
+  Dispatch elapsed: 55s  |  Total window: 100s
+  Ingestion rate: 0.15 docs/s  (books fully indexed / total window)
+  Indexing throughput: 427 tokens/s  (unique_words delta / total window)
+  Stats: {"unique_words":43784,"total_books":18}
+  Baseline query 1: 0.046898s
+  Baseline query 2: 0.005813s
+  Baseline query 3: 0.007832s
+
+=== PHASE 2: Scaling ===
+  Nodes: 3 (10.26.14.231 10.26.14.232 10.26.14.233)
+  Books dispatched: 50
+  Books indexed in window: 10
+  Dispatch elapsed: 28s  |  Total window: 73s
+  Ingestion rate: 0.14 docs/s  (books fully indexed / total window)
+  Indexing throughput: 229 tokens/s  (unique_words delta / total window)
+  Stats: {"unique_words":60619,"total_books":29}
+
+=== PHASE 3: Load test ===
+  Tool: powershell
+  Target: http://10.26.14.233/search?q=the&limit=10
+  Connections: 50 | Duration: 30s
+  Avg latency: 48,25 ms
+  p95 latency: 76,62 ms
+  p99 latency: 105,24 ms
+  Max latency: 5147,39 ms
+  Requests/sec: 919,25
+  CPU indexer: 21.85%  |  CPU search: 16.27%
+  Mem indexer: 302.1MiB  |  Mem search: 278.9MiB
+  Full output: phase3_load.txt
+
+=== PHASE 4: Failure test ===
+  Victim: 10.26.14.232 (search service stopped)
+  Result: RECOVERED
+  Recovery time: 2s

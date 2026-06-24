@@ -1,0 +1,56 @@
+20:08:08 Dispatching COUNT=50 START=201 across 1 nodes (concurrency=10, async=true)
+20:08:13 node=10.26.14.231 book=207 http=201
+20:08:13 node=10.26.14.231 book=201 http=201
+20:08:13 node=10.26.14.231 book=204 http=201
+20:08:13 node=10.26.14.231 book=208 http=201
+20:08:13 node=10.26.14.231 book=202 http=201
+20:08:13 node=10.26.14.231 book=210 http=201
+20:08:14 node=10.26.14.231 book=209 http=201
+20:08:14 node=10.26.14.231 book=203 http=201
+20:08:14 node=10.26.14.231 book=206 http=201
+20:08:14 node=10.26.14.231 book=205 http=201
+20:08:14 node=10.26.14.231 book=216 http=201
+20:08:14 node=10.26.14.231 book=212 http=201
+20:08:14 node=10.26.14.231 book=213 http=201
+20:08:14 node=10.26.14.231 book=215 http=201
+20:08:15 node=10.26.14.231 book=214 http=201
+20:08:15 node=10.26.14.231 book=211 http=201
+20:08:16 node=10.26.14.231 book=218 http=201
+20:08:16 node=10.26.14.231 book=220 http=201
+20:08:16 node=10.26.14.231 book=222 http=201
+20:08:16 node=10.26.14.231 book=217 http=201
+20:08:16 node=10.26.14.231 book=221 http=201
+20:08:16 node=10.26.14.231 book=230 http=201
+20:08:17 node=10.26.14.231 book=229 http=201
+20:08:17 node=10.26.14.231 book=227 http=201
+20:08:17 node=10.26.14.231 book=224 http=201
+20:08:17 node=10.26.14.231 book=219 http=201
+20:08:17 node=10.26.14.231 book=231 http=201
+20:08:17 node=10.26.14.231 book=232 http=201
+20:08:17 node=10.26.14.231 book=228 http=201
+20:08:17 node=10.26.14.231 book=235 http=201
+20:08:18 node=10.26.14.231 book=236 http=201
+20:08:18 node=10.26.14.231 book=237 http=201
+20:08:19 node=10.26.14.231 book=238 http=201
+20:08:19 node=10.26.14.231 book=234 http=201
+20:08:19 node=10.26.14.231 book=241 http=201
+20:08:19 node=10.26.14.231 book=233 http=201
+20:08:20 node=10.26.14.231 book=242 http=201
+20:08:20 node=10.26.14.231 book=223 http=201
+20:08:20 node=10.26.14.231 book=243 http=201
+20:08:20 node=10.26.14.231 book=226 http=201
+20:08:20 node=10.26.14.231 book=246 http=201
+20:08:20 node=10.26.14.231 book=249 http=201
+20:08:21 node=10.26.14.231 book=225 http=201
+20:08:21 node=10.26.14.231 book=250 http=201
+20:08:21 node=10.26.14.231 book=245 http=201
+20:08:22 node=10.26.14.231 book=240 http=201
+20:08:23 node=10.26.14.231 book=247 http=201
+20:08:23 node=10.26.14.231 book=248 http=201
+20:08:24 node=10.26.14.231 book=244 http=201
+20:08:28 node=10.26.14.231 book=239 http=404
+20:08:28 Done dispatching. Monitoring tips:
+20:08:28 - Per node downloaded count: curl -s http://<NODE>:8080/ingest/list
+20:08:28 - Per node indexing status:  curl -s http://<NODE>:8081/index/status
+20:08:28 - Per node search stats:     curl -s http://<NODE>:8082/stats
+20:08:28 - Nginx backend selection:   curl -i http://<MASTER_IP>/search?q=the | grep X-Upstream-Addr

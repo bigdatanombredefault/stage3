@@ -1,0 +1,6 @@
+NAME                CPU %     MEM USAGE / LIMIT     NET I/O
+stage3-search-1     12.99%    360.5MiB / 7.704GiB   97.3MB / 96MB
+stage3-crawler-1    0.14%     236.3MiB / 7.704GiB   41.8MB / 3.98MB
+stage3-indexer-1    25.87%    405.6MiB / 7.704GiB   118MB / 112MB
+stage3-activemq-1   0.41%     318.3MiB / 7.704GiB   415kB / 353kB
+stage3-nginx        0.00%     5.59MiB / 7.704GiB    30.9MB / 37.1MB
