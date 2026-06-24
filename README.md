@@ -8,33 +8,15 @@ A fault-tolerant, horizontally scalable search engine that distributes ingestion
 
 ## Demo Video
 
-> **YouTube (unlisted):** _[ADD LINK HERE BEFORE SUBMISSION]_
+> **YouTube :** [Video demonstration](https://www.youtube.com)
 >
-> Title must be: `[Stage 3] Search Engine Project - <Group Name> (ULPGC)`
->
-> See [`docs/video_guide.md`](docs/video_guide.md) for the full recording runbook.
+> Title : `[Stage 3] Search Engine Project - <Group Name> (ULPGC)`
 
 ---
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────┐
-│  MASTER NODE                                     │
-│  ActiveMQ :61616   Nginx :80 (least_conn LB)     │
-└──────────────────────────────────────────────────┘
-         ↑ JMS messages          ↓ HTTP search
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  PC1 (node) │  │  PC2 (node) │  │  PC3 (node) │
-│  crawler    │  │  crawler    │  │  crawler    │
-│  :8080      │  │  :8080      │  │  :8080      │
-│  indexer    │  │  indexer    │  │  indexer    │
-│  :8081/:5701│  │  :8081/:5701│  │  :8081/:5701│
-│  search     │  │  search     │  │  search     │
-│  :8082/:5702│  │  :8082/:5702│  │  :8082/:5702│
-└─────────────┘  └─────────────┘  └─────────────┘
-        └──── Hazelcast cluster (TCP-IP) ────┘
-```
+![Architecture](figures/architecture.svg)
 
 **Multi-service node topology:** each physical PC runs crawler + indexer + search together. This maximises data locality (the indexer only processes books its own crawler downloaded) and reduces inter-node latency.
 
@@ -50,9 +32,9 @@ A fault-tolerant, horizontally scalable search engine that distributes ingestion
 
 | Component | Technology | Ports |
 |-----------|-----------|-------|
-| Crawler / Datalake | Spring Boot | `:8080` |
-| Indexer | Spring Boot + Hazelcast | `:8081`, `:5701` |
-| Search | Spring Boot + Hazelcast | `:8082`, `:5702` |
+| Crawler / Datalake | Javalin 6.7.0 | `:8080` |
+| Indexer | Javalin 6.7.0 + Hazelcast | `:8081`, `:5701` |
+| Search | Javalin 6.7.0 + Hazelcast | `:8082`, `:5702` |
 | Message broker | Apache ActiveMQ | `:61616`, `:8161` |
 | Load balancer | Nginx | `:80` |
 
@@ -130,30 +112,7 @@ See [`CLUSTER_DEPLOYMENT.md`](CLUSTER_DEPLOYMENT.md) for the full step-by-step g
 
 ## Benchmarking
 
-### Reproduce the benchmarks
-
-```bash
-# Prerequisites: wrk installed, cluster running, at least 100 books indexed
-#   brew install wrk / apt install wrk
-
-# Run the full benchmark suite (baseline → scaling → load → failure)
-bash scripts/benchmark.sh --master 192.168.1.10 --workers "192.168.1.10 192.168.1.11 192.168.1.12"
-
-# Results are written to benchmarks/results/
-```
-
-See [`docs/guide.md`](docs/guide.md) for detailed benchmark procedures and interpretation guidance.
-
-### Metrics collected
-
-| Metric | Tool |
-|--------|------|
-| Ingestion rate (docs/s) | `lab_ingest_first_n.sh` + timing |
-| Query latency (avg, p95, max) | `wrk` |
-| CPU / memory per node | `docker stats` |
-| Recovery time after node failure | Manual timing |
-
-Results tables and charts belong in `benchmarks/results/`. See [`benchmarks/README.md`](benchmarks/README.md).
+See [`BENCHMARK.md`](BENCHMARK.md) for the complete lab benchmark guide — configurations A/B/C (1/3/6 nodes), ingestion scripts, wrk load tests, and result collection.
 
 ---
 
@@ -173,7 +132,6 @@ stage3/
 │   ├── lab_ingest_first_n.sh  # Distributed ingestion load generator
 │   └── benchmark.sh           # Full benchmark suite
 ├── benchmarks/
-│   ├── README.md              # What to record and how to structure results
 │   └── results/               # CSV / log files from actual runs (gitignored by default)
 └── docs/
     ├── guide.md               # Operational guide (detailed)
@@ -212,9 +170,15 @@ Making the cluster name configurable risks split-brain if different PCs accident
 
 | Software | Version |
 |----------|---------|
-| Java | 17 |
-| Spring Boot | 3.x |
-| Hazelcast | 5.x |
-| ActiveMQ | 5.x (`rmohr/activemq:latest`) |
+| Java | 21.0.2 LTS (language level 17) |
+| Javalin | 6.7.0 |
+| Hazelcast | 5.4.0 |
+| ActiveMQ | 5.18.3 (`rmohr/activemq`) |
 | Nginx | latest |
 | Docker Compose | v2 |
+
+## Authors
+- Alberto Rivero Monzón
+- Mariana Bordes Bueno
+
+This project was carried out as part of the Big Data course in the Bachelor's Degree in Data Science and Engineering at the University of Las Palmas de Gran Canaria (ULPGC).
