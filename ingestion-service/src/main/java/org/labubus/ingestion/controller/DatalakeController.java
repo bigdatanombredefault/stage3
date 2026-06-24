@@ -13,9 +13,6 @@ import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.UploadedFile;
 
-/**
- * Receives replicated datalake files from other crawler nodes.
- */
 public class DatalakeController {
     private static final Logger logger = LoggerFactory.getLogger(DatalakeController.class);
 
@@ -25,9 +22,6 @@ public class DatalakeController {
         this.storage = storage;
     }
 
-    /**
-     * Registers datalake receiver routes.
-     */
     public void registerRoutes(Javalin app) {
         app.post("/api/datalake/store", this::handleStore);
         logger.info("Datalake receiver routes registered");

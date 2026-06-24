@@ -16,20 +16,9 @@ import com.hazelcast.config.MultiMapConfig;
 import com.hazelcast.config.MultiMapConfig.ValueCollectionType;
 import com.hazelcast.config.NearCacheConfig;
 
-/**
- * Builds Hazelcast {@link Config} for the Search Service.
- *
- * <p>Uses TCP-IP discovery with a fixed member list and disables multicast/auto-detection.</p>
- */
 public final class HazelcastConfigFactory {
     private HazelcastConfigFactory() {}
 
-    /**
-     * Creates a Hazelcast configuration based on the provided settings.
-     *
-     * @param settings hazelcast settings (cluster name, member list, map names, etc.)
-     * @return the Hazelcast {@link Config}
-     */
     public static Config build(SearchConfig.Hazelcast settings) {
         Config config = new Config();
         config.setProperty("hazelcast.logging.type", "slf4j");

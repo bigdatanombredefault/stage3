@@ -25,9 +25,6 @@ public class InvertedIndexBuilder {
 		this.stopWords = stopWords;
 	}
 
-	/**
-	 * Index a book's body text
-	 */
 	public void indexBook(int bookId, String bodyText) {
 		Set<String> uniqueWords = extractWords(bodyText);
 
@@ -38,9 +35,6 @@ public class InvertedIndexBuilder {
 		logger.debug("Indexed book {} with {} unique words", bookId, uniqueWords.size());
 	}
 
-	/**
-	 * Extract unique words from text
-	 */
 	private Set<String> extractWords(String text) {
 		Set<String> words = new HashSet<>();
 
@@ -60,9 +54,6 @@ public class InvertedIndexBuilder {
 		return words;
 	}
 
-	/**
-	 * Check if a word is valid for indexing
-	 */
 	private boolean isValidWord(String word) {
 		if (word.length() < minWordLength || word.length() > maxWordLength) {
 			return false;
@@ -71,9 +62,6 @@ public class InvertedIndexBuilder {
 		return !stopWords.contains(word);
 	}
 
-	/**
-	 * Parse stop words from comma-separated string
-	 */
 	public static Set<String> parseStopWords(String stopWordsStr) {
 		if (stopWordsStr == null || stopWordsStr.trim().isEmpty()) {
 			return new HashSet<>();

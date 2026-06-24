@@ -13,22 +13,11 @@ import com.hazelcast.core.HazelcastInstance;
 
 import io.javalin.Javalin;
 
-/**
- * Application bootstrapper for the Indexing Service.
- *
- * <p>Loads configuration, starts Hazelcast, wires the ingestion listener and HTTP server,
- * and registers a JVM shutdown hook for clean termination.</p>
- */
 public final class IndexingBootstrap {
     private static final Logger logger = LoggerFactory.getLogger(IndexingBootstrap.class);
 
     private IndexingBootstrap() {}
 
-    /**
-     * Starts the Indexing Service.
-     *
-     * <p>On startup failure, logs the error and exits with code {@code 1}.</p>
-     */
     public static void run() {
         try {
             start();

@@ -15,9 +15,6 @@ public class MetadataExtractor {
 	private static final Pattern LANGUAGE_PATTERN = Pattern.compile("Language:\\s*(.+)", Pattern.CASE_INSENSITIVE);
 	private static final Pattern RELEASE_DATE_PATTERN = Pattern.compile("Release Date:\\s*.*?(\\d{4})", Pattern.CASE_INSENSITIVE);
 
-	/**
-     * Extract metadata from book header
-     */
 	public org.labubus.model.BookMetadata extractMetadata(int bookId, String header, String path) {
 		String title = extractTitle(header);
 		String author = extractAuthor(header);
@@ -80,9 +77,6 @@ public class MetadataExtractor {
 		return null;
 	}
 
-	/**
-	 * Clean and normalize extracted string
-	 */
 	private String cleanString(String str) {
 		if (str == null) {
 			return null;

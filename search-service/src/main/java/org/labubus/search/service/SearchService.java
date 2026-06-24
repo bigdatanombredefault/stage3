@@ -18,9 +18,6 @@ import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
 import com.hazelcast.multimap.MultiMap;
 
-/**
- * Provides full-text search over the distributed inverted index stored in Hazelcast.
- */
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
 
@@ -64,16 +61,6 @@ public class SearchService {
         return value.trim();
     }
 
-    /**
-     * Searches indexed books.
-     *
-     * @param query free-text query (tokenized by whitespace)
-     * @param author optional author filter
-     * @param language optional language filter
-     * @param year optional year filter
-     * @param limit optional max results (capped by {@code maxResults})
-     * @return ranked results
-     */
     public List<SearchResult> search(String query, String author, String language, Integer year, Integer limit) {
         logSearch(query, author, language, year, limit);
         return doSearch(new SearchQuery(query, author, language, year, limit));
@@ -192,12 +179,6 @@ public class SearchService {
         });
     }
 
-    /**
-     * Lists all books currently stored in the metadata map.
-     *
-     * @param limit optional max results (capped by {@code maxResults})
-     * @return results with score set to {@code 0}
-     */
     public List<SearchResult> getAllBooks(Integer limit) {
         int resultLimit = computeResultLimit(limit);
         IMap<Integer, BookMetadata> metadataMap = hazelcast.getMap(metadataMapName);
@@ -207,18 +188,12 @@ public class SearchService {
             .collect(Collectors.toList());
     }
 
-    /**
-     * Gets search statistics from Hazelcast.
-     *
-     * @return total number of books and unique indexed words
-     */
     public SearchStats getStats() {
         int totalBooks = hazelcast.getMap(metadataMapName).size();
         int uniqueWords = hazelcast.getMultiMap(invertedIndexName).keySet().size();
         return new SearchStats(totalBooks, uniqueWords);
     }
 
-    /** Search statistics snapshot. */
     public record SearchStats(int totalBooks, int uniqueWords) {}
 
     private record SearchQuery(String query, String author, String language, Integer year, Integer limit) {}

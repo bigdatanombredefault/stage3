@@ -104,11 +104,6 @@ public class IndexingService {
         this.metadataExtractor = new MetadataExtractor();
     }
 
-    /**
-     * Indexes a single book into Hazelcast, but only if it has not been indexed before.
-     * @param bookId The ID of the book to index.
-     * @throws IOException if reading from the datalake fails.
-     */
     public void indexBook(int bookId) throws IOException {
         if (isAlreadyIndexed(bookId)) {
             return;
@@ -175,9 +170,6 @@ public class IndexingService {
         logger.info("Indexed {} unique words for book {} into Hazelcast", words.size(), bookId);
     }
 
-    /**
-     * Clears the index and re-indexes all books from the datalake.
-     */
     public int rebuildIndex() throws IOException {
         logger.info("Starting full index rebuild in Hazelcast...");
         clearIndex();
@@ -188,16 +180,10 @@ public class IndexingService {
         return successCount;
     }
 
-    /**
-     * Returns {@code true} when the inverted index is empty in Hazelcast.
-     */
     public boolean isInvertedIndexEmpty() {
         return hazelcast.getMultiMap(invertedIndexName).keySet().isEmpty();
     }
 
-    /**
-     * Clears the index and re-indexes all books discovered by scanning the local datalake files.
-     */
     public int rebuildIndexFromLocalFiles() throws IOException {
         waitForPartitionStability();
         logger.info("Starting disaster-recovery index rebuild from local datalake files...");
@@ -254,18 +240,12 @@ public class IndexingService {
         }
     }
 
-    /**
-     * Gets statistics from the Hazelcast grid.
-     */
     public IndexStats getStats() {
         int booksIndexed = hazelcast.getMap(metadataMapName).size();
         int uniqueWords = hazelcast.getMultiMap(invertedIndexName).keySet().size();
         return new IndexStats(booksIndexed, uniqueWords);
     }
 
-    /**
-     * A simple helper method to tokenize and clean text.
-     */
     private Set<String> extractWords(String text) {
         if (text == null || text.isBlank()) {
             return Set.of();
@@ -285,8 +265,5 @@ public class IndexingService {
 
     private record BookData(String header, String body, String path) {}
 
-    /**
-     * A simple record to hold index statistics.
-     */
     public record IndexStats(int booksIndexed, int uniqueWords) {}
 }

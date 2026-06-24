@@ -27,18 +27,12 @@ public record IngestionConfig(
     Replication replication,
     Async async
 ) {
-    /** ActiveMQ connectivity settings used to publish ingestion messages. */
     public record ActiveMq(String brokerUrl, String queueName) {}
 
-    /** Datalake settings. {@code type} selects an implementation (e.g. {@code timestamp} or {@code bucket}). */
     public record Datalake(String type, String path, int bucketSize, String trackingFilename) {}
 
-    /** Project Gutenberg download settings. */
     public record Gutenberg(String baseUrl, int timeoutMs) {}
 
-    /**
-     * Replication settings for copying datalake content to another node.
-     */
     public record Replication(
         boolean enabled,
         String currentNodeIp,
@@ -48,14 +42,8 @@ public record IngestionConfig(
         Duration timeout
     ) {}
 
-    /** Async ingestion settings (to avoid blocking HTTP clients during download/replication). */
     public record Async(boolean enabled, int workers) {}
 
-    /**
-     * Loads configuration from classpath properties plus environment variables.
-     *
-     * @return a fully-initialized {@link IngestionConfig}
-     */
     public static IngestionConfig load() {
         Properties properties = loadProperties("application.properties");
         overlayEnvironment(properties);

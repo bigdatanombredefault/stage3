@@ -16,9 +16,6 @@ import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Replicates a downloaded book to one other node via the datalake receiver endpoint.
- */
 public class DatalakeReplicationClient {
     private static final Logger logger = LoggerFactory.getLogger(DatalakeReplicationClient.class);
 
@@ -36,21 +33,6 @@ public class DatalakeReplicationClient {
         this.timeout = Objects.requireNonNull(timeout);
     }
 
-    /**
-     * Replicates the book content to exactly one other node.
-     *
-     * <p>Nodes are tried in random order (excluding {@code currentNodeIp}). If a node fails,
-     * another node is tried until the list is exhausted.</p>
-     *
-     * @param bookId book identifier
-     * @param title best-effort title (may be blank)
-     * @param rawBookContent full raw book content (header + body)
-     * @param currentNodeIp current node IP/host (excluded from replication)
-     * @param clusterNodes list of cluster node IP/hosts
-     * @param targetPort HTTP port where the receiver endpoint is exposed
-     * @param endpointPath receiver path (e.g. {@code /api/datalake/store})
-     * @throws IOException if all replication attempts fail
-     */
     public void replicateOnce(
         int bookId,
         String title,

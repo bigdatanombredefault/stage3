@@ -16,21 +16,11 @@ import org.slf4j.LoggerFactory;
 
 import io.javalin.Javalin;
 
-/**
- * Application bootstrapper for the Ingestion Service.
- *
- * <p>Loads configuration, wires controller + services, starts the HTTP API, and registers a JVM shutdown hook.</p>
- */
 public final class IngestionBootstrap {
     private static final Logger logger = LoggerFactory.getLogger(IngestionBootstrap.class);
 
     private IngestionBootstrap() {}
 
-    /**
-     * Starts the Ingestion Service.
-     *
-     * <p>On startup failure, logs the error and exits with code {@code 1}.</p>
-     */
     public static void run() {
         try {
             start();

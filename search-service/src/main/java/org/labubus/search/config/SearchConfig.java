@@ -18,7 +18,6 @@ public record SearchConfig(
     int defaultLimit,
     Hazelcast hazelcast
 ) {
-    /** Hazelcast cluster and data-structure settings used by the Search Service. */
     public record Hazelcast(
         String clusterName,
         int port,
@@ -31,11 +30,6 @@ public record SearchConfig(
         String invertedIndexName
     ) {}
 
-    /**
-     * Loads configuration from classpath properties plus environment variables.
-     *
-     * @return a fully-initialized {@link SearchConfig}
-     */
     public static SearchConfig load() {
         Properties properties = loadProperties("application.properties");
         overlayEnvironment(properties);

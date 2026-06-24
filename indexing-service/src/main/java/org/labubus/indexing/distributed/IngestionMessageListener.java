@@ -18,11 +18,6 @@ import org.labubus.indexing.service.IndexingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * A background service that listens for messages from an ActiveMQ queue.
- * When a message is received, it triggers the IndexingService to index the specified book.
- * It's designed to be resilient and run in a separate thread.
- */
 public class IngestionMessageListener implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(IngestionMessageListener.class);
 
@@ -47,9 +42,6 @@ public class IngestionMessageListener implements Runnable {
         this.indexingService = indexingService;
     }
 
-    /**
-     * Starts the listener in a new background daemon thread.
-     */
     public void start() {
         int consumers = readPositiveIntEnvOrDefault(CONSUMERS_ENV_VAR, 1);
         for (int i = 0; i < consumers; i++) {
@@ -60,9 +52,6 @@ public class IngestionMessageListener implements Runnable {
         }
     }
 
-    /**
-     * Signals the listener to stop processing and shut down gracefully.
-     */
     public void stop() {
         this.running = false;
 

@@ -13,21 +13,11 @@ import com.hazelcast.core.HazelcastInstance;
 
 import io.javalin.Javalin;
 
-/**
- * Application bootstrapper for the Search Service.
- *
- * <p>Loads configuration, starts Hazelcast and the HTTP API, and registers a JVM shutdown hook.</p>
- */
 public final class SearchBootstrap {
     private static final Logger logger = LoggerFactory.getLogger(SearchBootstrap.class);
 
     private SearchBootstrap() {}
 
-    /**
-     * Starts the Search Service.
-     *
-     * <p>On startup failure, logs the error and exits with code {@code 1}.</p>
-     */
     public static void run() {
         try {
             start();

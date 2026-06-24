@@ -35,9 +35,6 @@ public class DatalakeReader {
 		this.trackingFilename = trackingFilename.trim();
 	}
 
-	/**
-	 * Get list of all downloaded book IDs from the tracking file
-	 */
 	public List<Integer> getDownloadedBooks() throws IOException {
 		Path trackingFile = Paths.get(datalakePath, trackingFilename);
 		List<Integer> bookIds = new ArrayList<>();
@@ -63,12 +60,6 @@ public class DatalakeReader {
 		return bookIds;
 	}
 
-	/**
-	 * Scans the local datalake directory for book files and returns discovered book IDs.
-	 *
-	 * <p>This is used for disaster recovery when Hazelcast state is empty and the tracking
-	 * file may be missing or incomplete.</p>
-	 */
 	public List<Integer> scanBookIdsFromFiles() throws IOException {
 		Path datalakeDir = Paths.get(datalakePath);
 		if (!Files.exists(datalakeDir)) {
@@ -104,9 +95,6 @@ public class DatalakeReader {
 		}
 	}
 
-	/**
-	 * Read book header for a specific book ID
-	 */
 	public String readBookHeader(int bookId) throws IOException {
 		BookPaths paths = resolveBookPaths(bookId);
 		Path headerPath = paths.headerPath();
@@ -116,9 +104,6 @@ public class DatalakeReader {
 		return Files.readString(headerPath);
 	}
 
-	/**
-	 * Read book body for a specific book ID
-	 */
 	public String readBookBody(int bookId) throws IOException {
 		BookPaths paths = resolveBookPaths(bookId);
 		Path bodyPath = paths.bodyPath();
@@ -128,16 +113,10 @@ public class DatalakeReader {
 		return Files.readString(bodyPath);
 	}
 
-	/**
-	 * Find header file for a book (searches all bucket/timestamp structures)
-	 */
 	private Path findBookHeader(int bookId) throws IOException {
 		return resolveBookPaths(bookId).headerPath();
 	}
 
-	/**
-	 * Generic method to find a book file with a specific suffix
-	 */
 	private BookPaths resolveBookPaths(int bookId) throws IOException {
 		BookPaths cached = bookPathsCache.get(bookId);
 		if (cached != null) {
@@ -181,9 +160,6 @@ public class DatalakeReader {
 		return new BookPaths(headerPath, bodyPath);
 	}
 
-	/**
-	 * Check if a book exists in the datalake
-	 */
 	public boolean bookExists(int bookId) {
 		try {
 			BookPaths p = resolveBookPaths(bookId);

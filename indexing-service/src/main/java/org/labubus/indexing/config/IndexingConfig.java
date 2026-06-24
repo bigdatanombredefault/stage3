@@ -23,7 +23,6 @@ public record IndexingConfig(
     ActiveMq activeMq,
     Datalake datalake
 ) {
-    /** Hazelcast cluster and data-structure settings used by the Indexing Service. */
     public record Hazelcast(
         String clusterName,
         int port,
@@ -36,17 +35,10 @@ public record IndexingConfig(
         String invertedIndexName
     ) {}
 
-    /** ActiveMQ connectivity settings used to consume ingestion messages. */
     public record ActiveMq(String brokerUrl, String queueName) {}
 
-    /** Datalake location and tracking file settings. */
     public record Datalake(String path, String trackingFilename) {}
 
-    /**
-     * Loads configuration from classpath properties plus environment variables.
-     *
-     * @return a fully-initialized {@link IndexingConfig}
-     */
     public static IndexingConfig load() {
         Properties properties = loadProperties("application.properties");
         overlayEnvironment(properties);

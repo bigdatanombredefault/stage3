@@ -4,22 +4,12 @@ import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * Utilities for parsing raw Project Gutenberg book content.
- */
 public final class BookContentParser {
     private BookContentParser() {}
 
     private static final Pattern START_MARKER = Pattern.compile("(?im)^\\*\\*\\*\\s*START\\s+OF.*$", Pattern.MULTILINE);
     private static final Pattern END_MARKER = Pattern.compile("(?im)^\\*\\*\\*\\s*END\\s+OF.*$", Pattern.MULTILINE);
 
-    /**
-     * Splits a raw book into header and body, using Project Gutenberg start/end markers.
-     *
-     * @param content raw downloaded content
-     * @return a two-element array: [header, body]
-     * @throws IOException if the expected markers are missing
-     */
     public static String[] splitHeaderBody(String content) throws IOException {
         if (content == null || content.isBlank()) {
             throw new BookFormatException("Invalid book format: content is empty");
