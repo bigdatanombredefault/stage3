@@ -23,7 +23,7 @@ Step-by-step instructions for running the distributed search engine on **multipl
         └──────── Hazelcast TCP-IP cluster ─────────┘
 ```
 
-PC1 typically runs both the master profile (ActiveMQ + Nginx) and the node profile (all three services). Every other PC runs only the node profile.
+PC1 runs both the master profile (ActiveMQ + Nginx) and the node profile (all three services). Every other PC runs only the node profile.
 
 ---
 
@@ -44,24 +44,6 @@ Every PC must be able to reach every other PC on these ports.
 
 ---
 
-## Step 0 — Prerequisites (do this once per PC)
-
-Install Docker Engine (v24+) and Docker Compose v2:
-
-```bash
-# Verify
-docker --version
-docker compose version
-```
-
-Install Git:
-
-```bash
-git --version
-```
-
----
-
 ## Step 1 — Clone the Repository on Every PC
 
 Run this on **each physical PC** that will participate in the cluster:
@@ -71,13 +53,11 @@ git clone https://github.com/bigdatanombredefault/stage3.git
 cd stage3
 ```
 
-All PCs must have the repository at the same relative path (or adapt the commands below accordingly).
-
 ---
 
 ## Step 2 — Update the Shared IPs (group leader only, once)
 
-One person (the group leader) updates `cluster-shared.env` with the real lab IPs and pushes to GitHub. **Every other PC then does a `git pull`** to receive the updated IPs.
+update `cluster-shared.env` with the real lab IPs and pushes to GitHub. **Every other PC then does a `git pull`** to receive the updated IPs.
 
 ### A) Find each PC's LAN IP
 
@@ -87,7 +67,6 @@ On each PC:
 ip addr show 
 ```
 
-Write them down. Example for this guide:
 - **PC1** (master + node): `10.26.14.202`
 - **PC2** (node): `10.26.14.201`
 - **PC3** (node): `10.26.14.200`
@@ -136,14 +115,13 @@ Run this one-liner on each PC (replace `<THIS_PC_IP>` with the IP you found in S
 
 ```bash
 cp cluster-shared.env .env
-echo "CURRENT_NODE_IP=10.26.14.200" >> .env   # change this IP per machine!
+echo "CURRENT_NODE_IP=10.26.14.200" >> .env 
 ```
 
 Or copy from the template and fill in all values manually:
 
 ```bash
 cp .env.example .env
-# Edit with nano/vim: set CURRENT_NODE_IP to this machine's LAN IP
 ```
 
 ### Resulting `.env` for PC1 (master + node)
@@ -168,8 +146,6 @@ Same as above, but the last line differs:
 ```bash
 CURRENT_NODE_IP=10.26.14.201   # ← PC2's own IP
 ```
-
-> **Important:** `CURRENT_NODE_IP` is what Hazelcast advertises to other cluster members. If it is `localhost` or blank, other nodes cannot reach this machine and the cluster will not form.
 
 ---
 
@@ -266,7 +242,7 @@ watch -n 2 'curl -s http://10.26.14.200:8081/index/status'
 ```bash
 # Search through Nginx (load balancer, shows which node responded):
 curl -i "http://10.26.14.200/search?q=whale&limit=5"
-# Look for: X-Upstream-Addr header — shows which PC served the request
+# X-Upstream-Addr header shows which PC served the request
 
 # Search directly on a node:
 curl "http://10.26.14.201:8082/search?q=whale&limit=5"
@@ -280,36 +256,9 @@ curl "http://10.26.14.200:8082/books?limit=10"
 
 ---
 
-## Updating IPs Mid-Session
-
-If the lab assigns different IPs in a new session:
-
-```bash
-# Group leader only:
-nano cluster-shared.env    # update IPs
-git add cluster-shared.env
-git commit -m "chore: update lab IPs"
-git push
-
-# Every PC:
-git pull
-cp cluster-shared.env .env
-echo "CURRENT_NODE_IP=<THIS_PC_IP>" >> .env
-
-# Restart services to pick up new config:
-docker compose --profile node down
-docker compose --profile node up -d
-# (master PC: use --profile master --profile node)
-```
-
----
-
 ## Running the Benchmarks
 
-The benchmark suite runs four test phases matching the §4.4 requirements from the project guide.
-
 ```bash
-# Full benchmark suite — writes results to benchmarks/results/
 bash scripts/benchmark.sh \
   --master 10.26.14.200 \
   --workers "10.26.14.200 10.26.14.201 10.26.14.202"
@@ -324,7 +273,6 @@ bash scripts/benchmark.sh \
 | Load | `wrk` concurrent search queries | avg/p95/max latency |
 | Failure | Stop one node mid-query | Recovery time, request errors |
 
-Results are written to `benchmarks/results/`. See `benchmarks/README.md` for the expected format.
-
+Results are written to `benchmarks/results/`.
 ---
 
