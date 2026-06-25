@@ -8,10 +8,7 @@ A fault-tolerant, horizontally scalable search engine that distributes ingestion
 
 ## Demo Video
 
-> **YouTube :** [Video demonstration](https://www.youtube.com)
->
-> Title : `[Stage 3] Search Engine Project - <Group Name> (ULPGC)`
-
+> **YouTube :** [Video demonstration](https://youtu.be/mZO4dDo2DHw)
 ---
 
 ## Architecture
@@ -146,10 +143,10 @@ stage3/
 Data locality: each indexer processes only books stored on the same physical disk, eliminating remote datalake reads during indexing. The trade-off is coupled service lifecycles per node, which is acceptable in a controlled lab environment.
 
 **Why embedded Hazelcast members instead of standalone containers?**
-Each service IS a Hazelcast member — it stores real data partitions. This reduces network hops between the indexer writing to the index and the data store holding it. The alternative (client/server mode) would be cleaner but adds a layer of containers per node, which complicates the lab setup.
+Each service IS a Hazelcast member, it stores real data partitions. This reduces network hops between the indexer writing to the index and the data store holding it. The alternative (client/server mode) would be cleaner but adds a layer of containers per node, which complicates the lab setup.
 
 **Why TCP-IP discovery instead of multicast?**
-Lab networks typically block multicast. TCP-IP with an explicit `CLUSTER_NODES_LIST` is more reliable and easier to reason about. `CURRENT_NODE_IP` must be the machine's LAN IP — never `localhost` — so Hazelcast advertises a reachable address to peers.
+Lab networks typically block multicast. TCP-IP with an explicit `CLUSTER_NODES_LIST` is more reliable and easier to reason about. `CURRENT_NODE_IP` must be the machine's LAN IP, never `localhost`, so Hazelcast advertises a reachable address to peers.
 
 **Why hardcode `hazelcast.cluster.name`?**
 Making the cluster name configurable risks split-brain if different PCs accidentally use different values. Hardcoding `search-cluster` is simpler and eliminates that failure mode.
@@ -158,10 +155,10 @@ Making the cluster name configurable risks split-brain if different PCs accident
 
 ## Fault Tolerance
 
-- **Datalake:** replication factor R=2 — each book is stored on 2 nodes. If one node fails, the book is still accessible for reindexing.
-- **Hazelcast index:** `backupCount=2`, `asyncBackupCount=1` — the inverted index survives up to 2 simultaneous node failures without data loss.
+- **Datalake:** replication factor R=2, each book is stored on 2 nodes. If one node fails, the book is still accessible for reindexing.
+- **Hazelcast index:** `backupCount=2`, `asyncBackupCount=1`, the inverted index survives up to 2 simultaneous node failures without data loss.
 - **ActiveMQ:** at-least-once delivery with configurable redelivery (`INDEXER_MAX_DELIVERIES`). Idempotent indexing prevents duplicate entries.
-- **Nginx:** `max_fails=3 fail_timeout=15s` — a failed search node is automatically removed from the pool; requests reroute to healthy nodes instantly.
+- **Nginx:** `max_fails=3 fail_timeout=15s`, a failed search node is automatically removed from the pool; requests reroute to healthy nodes instantly.
 - **CP Subsystem FencedLock:** used for concurrent inverted index writes when ≥3 Hazelcast members are present. Falls back to a local `ReentrantLock` for smaller clusters.
 
 ---
